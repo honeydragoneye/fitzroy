@@ -1,10 +1,8 @@
 mod claude;
-mod codex;
 
 use serde::Serialize;
 
 pub use claude::ClaudeProvider;
-pub use codex::CodexProvider;
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +33,14 @@ pub struct ModelUsage {
     pub tokens: TokenUsage,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyTokens {
+    /// 그날이 시작하는 시각(로컬 자정)
+    pub day_start: i64,
+    pub tokens: u64,
+}
+
 /// Provider가 돌려주는 사용량. 서비스마다 얻을 수 있는 정보가 달라서 모두 옵션이다.
 /// 시각은 Unix epoch 밀리초.
 #[derive(Debug, Clone, Default, Serialize)]
@@ -48,8 +54,8 @@ pub struct Usage {
     pub tokens_last_5h: Option<TokenUsage>,
     pub tokens_last_7d: Option<TokenUsage>,
     pub models_today: Option<Vec<ModelUsage>>,
-    /// 최근 24시간의 시간별 토큰 합계. 오래된 것부터 24칸.
-    pub hourly_tokens_24h: Option<Vec<u64>>,
+    /// 이번 주(일요일~토요일)의 날짜별 토큰 합계. 아직 오지 않은 날은 0.
+    pub daily_tokens_this_week: Option<Vec<DailyTokens>>,
     pub error: Option<String>,
 }
 
@@ -79,7 +85,7 @@ pub struct ProviderReport {
 }
 
 pub fn all() -> Vec<Box<dyn Provider>> {
-    vec![Box::new(ClaudeProvider::default()), Box::new(CodexProvider)]
+    vec![Box::new(ClaudeProvider::default())]
 }
 
 pub fn fetch_all(providers: &[Box<dyn Provider>]) -> Vec<ProviderReport> {
@@ -93,7 +99,7 @@ pub fn fetch_all(providers: &[Box<dyn Provider>]) -> Vec<ProviderReport> {
         .collect()
 }
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
@@ -116,7 +122,10 @@ mod tests {
                     cache_read: 5,
                     ..TokenUsage::default()
                 }),
-                hourly_tokens_24h: Some(vec![0; 24]),
+                daily_tokens_this_week: Some(vec![DailyTokens {
+                    day_start: 1_700_000_000_000,
+                    tokens: 7,
+                }]),
                 ..Usage::default()
             },
         };
@@ -126,7 +135,8 @@ mod tests {
         assert_eq!(json["sessionPercent"], 27.0);
         assert_eq!(json["sessionResetsAt"], 1_700_000_000_000i64);
         assert_eq!(json["tokensToday"]["cacheRead"], 5);
-        assert_eq!(json["hourlyTokens24h"].as_array().unwrap().len(), 24);
+        assert_eq!(json["dailyTokensThisWeek"][0]["dayStart"], 1_700_000_000_000i64);
+        assert_eq!(json["dailyTokensThisWeek"][0]["tokens"], 7);
         assert!(json["weeklyPercent"].is_null());
         assert!(json["tokensLast5h"].is_null());
         assert!(json["modelsToday"].is_null());

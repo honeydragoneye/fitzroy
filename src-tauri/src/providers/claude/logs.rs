@@ -13,7 +13,7 @@ use std::time::SystemTime;
 use chrono::DateTime;
 use serde::Deserialize;
 
-use crate::providers::{ModelUsage, TokenUsage};
+use crate::providers::{DailyTokens, ModelUsage, TokenUsage};
 
 pub const HOUR_MS: i64 = 60 * 60 * 1000;
 
@@ -209,13 +209,25 @@ pub struct Summary {
     pub last_7d: TokenUsage,
     /// 오늘 사용량이 많은 순
     pub models_today: Vec<ModelUsage>,
-    /// 최근 24시간의 시간별 토큰 합계. 오래된 것부터 24칸.
-    pub hourly_24h: Vec<u64>,
+    /// `day_starts` 의 날짜별 토큰 합계
+    pub daily: Vec<DailyTokens>,
 }
 
-pub fn summarize(entries: &[Entry], now_ms: i64, today_start_ms: i64) -> Summary {
+/// `day_starts` 는 그래프에 넣을 날짜들의 시작 시각을 오래된 날부터 늘어놓은 것이다.
+pub fn summarize(
+    entries: &[Entry],
+    now_ms: i64,
+    today_start_ms: i64,
+    day_starts: &[i64],
+) -> Summary {
     let mut summary = Summary {
-        hourly_24h: vec![0; 24],
+        daily: day_starts
+            .iter()
+            .map(|&day_start| DailyTokens {
+                day_start,
+                tokens: 0,
+            })
+            .collect(),
         ..Summary::default()
     };
     let mut models: HashMap<&str, TokenUsage> = HashMap::new();
@@ -235,8 +247,9 @@ pub fn summarize(entries: &[Entry], now_ms: i64, today_start_ms: i64) -> Summary
         if age < 7 * 24 * HOUR_MS {
             summary.last_7d.add(&entry.tokens);
         }
-        if age < 24 * HOUR_MS {
-            summary.hourly_24h[23 - (age / HOUR_MS) as usize] += entry.tokens.total();
+        // 그 시각이 속한 날: 시작 시각이 그보다 늦지 않은 마지막 날
+        if let Some(day) = day_starts.iter().rposition(|&start| start <= entry.ts_ms) {
+            summary.daily[day].tokens += entry.tokens.total();
         }
     }
 
@@ -345,6 +358,8 @@ mod tests {
     fn summarizes_by_window_and_model() {
         let now = 100 * 24 * HOUR_MS;
         let today_start = now - 10 * HOUR_MS;
+        // 그제, 어제, 오늘, 내일
+        let day_starts = [-48, -24, 0, 24].map(|hours| today_start + hours * HOUR_MS);
         let entry = |age_ms: i64, model: &str, input: u64| Entry {
             key: None,
             ts_ms: now - age_ms,
@@ -364,14 +379,13 @@ mod tests {
             entry(-HOUR_MS, "a", 64),
         ];
 
-        let s = summarize(&entries, now, today_start);
+        let s = summarize(&entries, now, today_start, &day_starts);
         assert_eq!(s.last_5h.input, 3);
         assert_eq!(s.today.input, 7);
         assert_eq!(s.last_7d.input, 31);
-        assert_eq!(s.hourly_24h[23], 3);
-        assert_eq!(s.hourly_24h[17], 4);
-        assert_eq!(s.hourly_24h[0], 8);
-        assert_eq!(s.hourly_24h.iter().sum::<u64>(), 15);
+        let daily: Vec<u64> = s.daily.iter().map(|d| d.tokens).collect();
+        assert_eq!(daily, [0, 8, 7, 0]);
+        assert_eq!(s.daily[0].day_start, day_starts[0]);
         assert_eq!(s.models_today.len(), 2);
         assert_eq!(s.models_today[0].model, "b");
         assert_eq!(s.models_today[0].tokens.input, 6);
