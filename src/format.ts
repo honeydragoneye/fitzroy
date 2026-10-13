@@ -16,6 +16,17 @@ export function formatResetTime(ms: number, now = new Date()): string {
   return `${weekdayFormat.format(date)} ${time}`;
 }
 
+const dayFormat = new Intl.DateTimeFormat("ko-KR", {
+  month: "numeric",
+  day: "numeric",
+  weekday: "short",
+});
+
+// "10. 13. (화)"
+export function formatDay(ms: number): string {
+  return dayFormat.format(new Date(ms));
+}
+
 export function totalTokens(t: TokenUsage): number {
   return t.input + t.output + t.cacheWrite + t.cacheRead;
 }

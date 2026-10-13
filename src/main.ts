@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { formatResetTime, formatTokens, totalTokens } from "./format";
-import type { ProviderReport } from "./types";
+import { LogicalSize } from "@tauri-apps/api/dpi";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { formatDay, formatResetTime, formatTokens, totalTokens } from "./format";
+import type { DailyTokens, ProviderReport } from "./types";
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -42,15 +44,41 @@ function statRow(label: string, value: string): HTMLElement {
   return row;
 }
 
-function hourlyChart(hours: number[]): HTMLElement {
+const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
+
+// 이번 주(일요일~토요일) 날짜별 막대. 막대에 커서를 올리면 그날의 날짜와 사용량이 뜬다.
+function weekChart(days: DailyTokens[]): HTMLElement {
   const chart = el("div", "chart");
-  const max = Math.max(...hours, 1);
-  for (const value of hours) {
+  const max = Math.max(...days.map((d) => d.tokens), 1);
+  const now = Date.now();
+  const todayIndex = days.reduce((last, day, index) => (day.dayStart <= now ? index : last), -1);
+
+  days.forEach((day, index) => {
+    const column = el("div", "chart-column");
+    if (index === todayIndex) column.classList.add("chart-today");
+    if (index > todayIndex) column.classList.add("chart-future");
+
+    const track = el("div", "chart-track");
     const bar = el("div", "chart-bar");
-    bar.style.height = `${Math.max(value > 0 ? 6 : 0, (value / max) * 100)}%`;
-    chart.append(bar);
-  }
-  chart.title = "최근 24시간 시간별 토큰";
+    bar.style.height = `${Math.max(day.tokens > 0 ? 6 : 0, (day.tokens / max) * 100)}%`;
+    track.append(bar);
+
+    column.append(track, el("div", "chart-label", WEEKDAY_LABELS[index % 7]));
+
+    if (index <= todayIndex) {
+      const tip = el(
+        "div",
+        "chart-tip",
+        `${formatDay(day.dayStart)} · ${formatTokens(day.tokens)} 토큰`,
+      );
+      // 양 끝 막대의 말풍선이 카드 밖으로 나가지 않게 정렬을 바꾼다.
+      if (index < 2) tip.classList.add("chart-tip-start");
+      else if (index >= days.length - 2) tip.classList.add("chart-tip-end");
+      column.append(tip);
+    }
+
+    chart.append(column);
+  });
   return chart;
 }
 
@@ -82,8 +110,8 @@ function card(report: ProviderReport): HTMLElement {
   if (report.tokensLast7d) {
     node.append(statRow("최근 7일", `${formatTokens(totalTokens(report.tokensLast7d))} 토큰`));
   }
-  if (report.hourlyTokens24h) {
-    node.append(hourlyChart(report.hourlyTokens24h));
+  if (report.dailyTokensThisWeek?.length) {
+    node.append(weekChart(report.dailyTokensThisWeek));
   }
 
   if (report.modelsToday?.length) {
@@ -118,6 +146,24 @@ async function refresh() {
   }
 }
 
-window.addEventListener("DOMContentLoaded", refresh);
+const PANEL_WIDTH = 300;
+const PANEL_MAX_HEIGHT = 640;
+
+// 창 높이를 내용에 맞춘다. 내용이 바뀔 때마다 다시 맞춘다.
+function fitWindowToContent(container: HTMLElement) {
+  let lastHeight = 0;
+  new ResizeObserver(() => {
+    const height = Math.min(PANEL_MAX_HEIGHT, Math.ceil(container.getBoundingClientRect().height));
+    if (height === 0 || height === lastHeight) return;
+    lastHeight = height;
+    void getCurrentWindow().setSize(new LogicalSize(PANEL_WIDTH, height));
+  }).observe(container);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  const container = document.querySelector<HTMLElement>("#cards");
+  if (container) fitWindowToContent(container);
+  void refresh();
+});
 // 창이 열릴 때마다 최신 값으로 갱신
 window.addEventListener("focus", refresh);
