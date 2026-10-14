@@ -1,4 +1,4 @@
-//! 메뉴 막대 아이콘 옆의 사용률 글자와 경고 색.
+//! 메뉴 막대 아이콘 옆의 사용률 글자와, 사용률에 따라 낮에서 노을로 물드는 아이콘.
 
 use std::sync::Mutex;
 
@@ -10,29 +10,90 @@ use crate::settings::SettingsStore;
 
 pub const TRAY_ID: &str = "main";
 
-const WARNING_PERCENT: f64 = 80.0;
-const CRITICAL_PERCENT: f64 = 95.0;
-const WARNING_COLOR: [u8; 3] = [255, 149, 0];
-const CRITICAL_COLOR: [u8; 3] = [255, 59, 48];
+/// 낮(노을 없음)의 바위: 햇빛 받은 화강암 꼭대기와 푸른 그늘이 진 아래쪽
+const DAY_TOP: [u8; 3] = [214, 184, 150];
+const DAY_BOTTOM: [u8; 3] = [104, 116, 134];
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Severity {
-    Normal,
-    Warning,
-    Critical,
+/// 이 사용률까지는 낮이고, 노을 시작까지 낮에서 노을로 넘어간다.
+const DAY_UNTIL_PERCENT: f64 = 40.0;
+const GLOW_START_PERCENT: f64 = 50.0;
+
+/// 사용률별 노을 색. 사이 값은 이웃한 두 색을 섞는다.
+const GLOW_STOPS: &[(f64, [u8; 3])] = &[
+    (50.0, [240, 150, 0]),
+    (60.0, [236, 118, 0]),
+    (70.0, [230, 90, 0]),
+    (80.0, [218, 64, 0]),
+    (90.0, [200, 44, 0]),
+    (95.0, [184, 34, 0]),
+    (100.0, [168, 26, 0]),
+];
+
+/// 노을 바위의 꼭대기는 노을 색보다 밝게, 바닥은 어둡게 칠한다.
+const TOP_LIGHT: f64 = 1.15;
+const BOTTOM_SHADE: f64 = 0.7;
+
+/// 봉우리 안쪽에서 능선을 나누는 틈에 채우는 눈 색
+const SNOW: [u8; 3] = [255, 255, 255];
+
+/// 틈 아래 바위 턱에 눈을 이만큼(픽셀) 더 쌓는다.
+const SNOW_DEPTH: usize = 2;
+
+/// 틈으로 보려면 좌우나 위아래 양쪽 모두 이 거리(픽셀) 안에 봉우리가 있어야 한다.
+/// 봉우리 사이의 하늘이나 바깥 윤곽의 가장자리를 걸러낸다.
+const RIDGE_GAP_REACH: usize = 4;
+
+/// 이보다 불투명한 픽셀부터 봉우리로 본다.
+const RIDGE_ALPHA: u8 = 40;
+
+/// 아이콘을 칠할 단계(1% 단위). 사용률을 모르면 None이고, 그때는 기본 아이콘을 쓴다.
+pub fn icon_level(percent: Option<f64>) -> Option<u8> {
+    Some(percent?.round().clamp(0.0, 100.0) as u8)
 }
 
-pub fn severity(percent: Option<f64>) -> Severity {
-    match percent {
-        Some(p) if p >= CRITICAL_PERCENT => Severity::Critical,
-        Some(p) if p >= WARNING_PERCENT => Severity::Warning,
-        _ => Severity::Normal,
+fn glow_color(level: u8) -> [u8; 3] {
+    let percent = f64::from(level);
+    let mut color = GLOW_STOPS[0].1;
+    for pair in GLOW_STOPS.windows(2) {
+        let ((from, a), (to, b)) = (pair[0], pair[1]);
+        if percent < from {
+            break;
+        }
+        let t = ((percent - from) / (to - from)).min(1.0);
+        color = mix_color(a, b, t);
     }
+    color
+}
+
+fn mix(a: u8, b: u8, t: f64) -> u8 {
+    (f64::from(a) * (1.0 - t) + f64::from(b) * t).round() as u8
+}
+
+fn mix_color(a: [u8; 3], b: [u8; 3], t: f64) -> [u8; 3] {
+    [0, 1, 2].map(|i| mix(a[i], b[i], t))
+}
+
+fn scale(color: [u8; 3], factor: f64) -> [u8; 3] {
+    color.map(|c| (f64::from(c) * factor).round().min(255.0) as u8)
+}
+
+/// 사용률에 따른 바위의 꼭대기 색과 바닥 색
+fn rock_colors(level: u8) -> ([u8; 3], [u8; 3]) {
+    let glow = glow_color(level);
+    let (glow_top, glow_bottom) = (scale(glow, TOP_LIGHT), scale(glow, BOTTOM_SHADE));
+    let t = ((f64::from(level) - DAY_UNTIL_PERCENT) / (GLOW_START_PERCENT - DAY_UNTIL_PERCENT))
+        .clamp(0.0, 1.0);
+    (
+        mix_color(DAY_TOP, glow_top, t),
+        mix_color(DAY_BOTTOM, glow_bottom, t),
+    )
 }
 
 /// 메뉴 막대에 띄울 값: 현재 세션 사용률
 pub fn primary_percent(reports: &[ProviderReport]) -> Option<f64> {
-    reports.iter().find_map(|report| report.usage.session_percent)
+    reports
+        .iter()
+        .find_map(|report| report.usage.session_percent)
 }
 
 /// 표시를 껐으면 글자를 없애고, 켰는데 값이 없으면 "–" 를 보여준다.
@@ -50,13 +111,76 @@ pub fn template_icon() -> Image<'static> {
     tauri::include_image!("icons/tray.png")
 }
 
-/// 템플릿 아이콘의 모양은 그대로 두고 한 가지 색으로 칠한다.
-fn tinted_icon(color: [u8; 3]) -> Image<'static> {
+/// 템플릿 아이콘의 모양에 바위 색을 칠한다. 봉우리마다 꼭대기는 밝고 아래로 갈수록 어둡다.
+/// 원래 아이콘에서 능선을 나누던 틈은 흰 눈으로 채우고, 그 아래 바위 턱에 눈을 조금 더 쌓는다.
+fn painted_icon(level: u8) -> Image<'static> {
     let icon = template_icon();
+    let (width, height) = (icon.width() as usize, icon.height() as usize);
     let mut rgba = icon.rgba().to_vec();
-    for pixel in rgba.chunks_exact_mut(4) {
-        pixel[..3].copy_from_slice(&color);
+    let (top_color, bottom_color) = rock_colors(level);
+
+    let solid: Vec<bool> = rgba
+        .chunks_exact(4)
+        .map(|pixel| pixel[3] > RIDGE_ALPHA)
+        .collect();
+    let solid_in_row = |y: usize, from: usize, to: usize| (from..to).any(|x| solid[y * width + x]);
+    let solid_in_column =
+        |x: usize, from: usize, to: usize| (from..to).any(|y| solid[y * width + x]);
+    let mut snowy = vec![false; width * height];
+
+    for x in 0..width {
+        let ridge = (0..height).find(|&y| solid[y * width + x]);
+        for y in 0..height {
+            let t = ridge.map_or(0.0, |ridge| {
+                (y.saturating_sub(ridge) as f64 / (height - 1 - ridge).max(1) as f64).min(1.0)
+            });
+            let pixel = &mut rgba[(y * width + x) * 4..][..4];
+            pixel[..3].copy_from_slice(&mix_color(top_color, bottom_color, t));
+
+            // 능선 아래의 얇은 틈만 고른다: 좌우가 가까이 막혔거나 위아래가 가까이 막힌 곳
+            let reach = RIDGE_GAP_REACH;
+            let gap = ridge.is_some_and(|ridge| ridge < y)
+                && ((solid_in_row(y, x.saturating_sub(reach), x)
+                    && solid_in_row(y, x + 1, (x + 1 + reach).min(width)))
+                    || (solid_in_column(x, y.saturating_sub(reach), y)
+                        && solid_in_column(x, y + 1, (y + 1 + reach).min(height))));
+            if gap && pixel[3] < 255 {
+                let opacity = f64::from(pixel[3]) / 255.0;
+                let rock = [pixel[0], pixel[1], pixel[2]];
+                pixel[..3].copy_from_slice(&mix_color(SNOW, rock, opacity));
+                pixel[3] = 255;
+                snowy[y * width + x] = true;
+            }
+        }
     }
+
+    // 원래 비어 있던 틈에서만 아래로 쌓는다. 윤곽의 흐릿한 가장자리에서 쌓으면 테두리가 하얗게 된다.
+    let away_from_outline = |x: usize, y: usize| {
+        (y.saturating_sub(1)..(y + 2).min(height)).all(|yy| {
+            (x.saturating_sub(1)..(x + 2).min(width))
+                .all(|xx| solid[yy * width + xx] || snowy[yy * width + xx])
+        })
+    };
+    let mut piled = Vec::new();
+    for x in 0..width {
+        for y in 0..height {
+            if !snowy[y * width + x] || solid[y * width + x] {
+                continue;
+            }
+            for below in y + 1..(y + 1 + SNOW_DEPTH).min(height) {
+                if solid[below * width + x]
+                    && !snowy[below * width + x]
+                    && away_from_outline(x, below)
+                {
+                    piled.push(below * width + x);
+                }
+            }
+        }
+    }
+    for i in piled {
+        rgba[i * 4..i * 4 + 3].copy_from_slice(&SNOW);
+    }
+
     Image::new_owned(rgba, icon.width(), icon.height())
 }
 
@@ -88,10 +212,10 @@ pub fn shrink_title_font(tray: &tauri::tray::TrayIcon) {
 #[cfg(not(target_os = "macos"))]
 pub fn shrink_title_font(_tray: &tauri::tray::TrayIcon) {}
 
-/// 마지막으로 적용한 경고 단계. 단계가 바뀔 때만 아이콘을 갈아 끼운다.
+/// 마지막으로 적용한 아이콘 단계. 단계가 바뀔 때만 아이콘을 갈아 끼운다.
 #[derive(Default)]
 pub struct MenuBarState {
-    severity: Mutex<Option<Severity>>,
+    level: Mutex<Option<Option<u8>>>,
 }
 
 pub fn update(app: &AppHandle, reports: &[ProviderReport]) {
@@ -102,17 +226,16 @@ pub fn update(app: &AppHandle, reports: &[ProviderReport]) {
     let show = app.state::<SettingsStore>().get().show_percent_in_menu_bar;
     let _ = tray.set_title(title(percent, show));
 
-    let next = severity(percent);
+    let next = icon_level(percent);
     let state = app.state::<MenuBarState>();
-    let mut applied = state.severity.lock().unwrap();
+    let mut applied = state.level.lock().unwrap();
     if *applied == Some(next) {
         return;
     }
-    // 평소에는 메뉴 막대 밝기를 따라가는 템플릿 아이콘, 경고일 때는 색을 입힌 아이콘
+    // 값을 모를 때는 메뉴 막대 밝기를 따라가는 템플릿 아이콘, 알면 색을 칠한 아이콘
     let (icon, as_template) = match next {
-        Severity::Normal => (template_icon(), true),
-        Severity::Warning => (tinted_icon(WARNING_COLOR), false),
-        Severity::Critical => (tinted_icon(CRITICAL_COLOR), false),
+        Some(level) => (painted_icon(level), false),
+        None => (template_icon(), true),
     };
     let _ = tray.set_icon(Some(icon));
     let _ = tray.set_icon_as_template(as_template);
@@ -124,13 +247,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn severity_thresholds() {
-        assert_eq!(severity(None), Severity::Normal);
-        assert_eq!(severity(Some(79.9)), Severity::Normal);
-        assert_eq!(severity(Some(80.0)), Severity::Warning);
-        assert_eq!(severity(Some(94.9)), Severity::Warning);
-        assert_eq!(severity(Some(95.0)), Severity::Critical);
-        assert_eq!(severity(Some(100.0)), Severity::Critical);
+    fn icon_level_rounds_and_clamps() {
+        assert_eq!(icon_level(None), None);
+        assert_eq!(icon_level(Some(0.0)), Some(0));
+        assert_eq!(icon_level(Some(84.6)), Some(85));
+        assert_eq!(icon_level(Some(120.0)), Some(100));
+    }
+
+    #[test]
+    fn glow_color_follows_stops() {
+        assert_eq!(glow_color(50), [240, 150, 0]);
+        assert_eq!(glow_color(55), [238, 134, 0]);
+        assert_eq!(glow_color(80), [218, 64, 0]);
+        assert_eq!(glow_color(100), [168, 26, 0]);
+    }
+
+    #[test]
+    fn rock_turns_from_day_to_sunset() {
+        assert_eq!(rock_colors(0), (DAY_TOP, DAY_BOTTOM));
+        assert_eq!(rock_colors(40), (DAY_TOP, DAY_BOTTOM));
+        let glow = glow_color(50);
+        assert_eq!(
+            rock_colors(50),
+            (scale(glow, TOP_LIGHT), scale(glow, BOTTOM_SHADE))
+        );
+        let (top, _) = rock_colors(45);
+        assert_eq!(top, mix_color(DAY_TOP, scale(glow, TOP_LIGHT), 0.5));
     }
 
     #[test]
@@ -143,13 +285,27 @@ mod tests {
     }
 
     #[test]
-    fn tinted_icon_keeps_shape() {
+    fn painted_icon_keeps_outline() {
         let base = template_icon();
-        let tinted = tinted_icon(WARNING_COLOR);
-        assert_eq!((tinted.width(), tinted.height()), (base.width(), base.height()));
-        for (a, b) in base.rgba().chunks_exact(4).zip(tinted.rgba().chunks_exact(4)) {
-            assert_eq!(a[3], b[3]);
-            assert_eq!(&b[..3], &WARNING_COLOR);
+        let (width, height) = (base.width() as usize, base.height() as usize);
+        let icon = painted_icon(100);
+        assert_eq!((icon.width(), icon.height()), (base.width(), base.height()));
+        // 봉우리 안쪽 틈만 메워지므로 불투명도는 그대로이거나 꽉 찬다.
+        for (a, b) in base.rgba().chunks_exact(4).zip(icon.rgba().chunks_exact(4)) {
+            assert!(b[3] == a[3] || b[3] == 255);
         }
+
+        // 가장 높은 봉우리의 꼭대기는 그 단계의 꼭대기 색
+        let alpha = |x: usize, y: usize| base.rgba()[(y * width + x) * 4 + 3];
+        let (x, top) = (0..width)
+            .filter_map(|x| {
+                (0..height)
+                    .find(|&y| alpha(x, y) > RIDGE_ALPHA)
+                    .map(|y| (x, y))
+            })
+            .min_by_key(|&(_, y)| y)
+            .unwrap();
+        let i = (top * width + x) * 4;
+        assert_eq!(&icon.rgba()[i..i + 3], &rock_colors(100).0);
     }
 }
