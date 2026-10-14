@@ -1,13 +1,19 @@
+mod menu_bar;
 mod providers;
+mod refresher;
+mod settings;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, WindowEvent};
+use tauri::{AppHandle, Manager, State, WindowEvent};
 use tauri_plugin_positioner::{Position, WindowExt};
 
-use providers::{Provider, ProviderReport};
+use menu_bar::MenuBarState;
+use providers::ProviderReport;
+use refresher::Refresher;
+use settings::{Settings, SettingsStore};
 
 const MAIN_WINDOW: &str = "main";
 
@@ -20,14 +26,27 @@ struct PanelState {
     hidden_on_blur_at: Mutex<Option<Instant>>,
 }
 
-struct Providers(Arc<Vec<Box<dyn Provider>>>);
+/// 가장 최근에 가져온 사용량. 새 값은 `usage-updated` 이벤트로 온다.
+#[tauri::command]
+fn get_usage(refresher: State<'_, Refresher>) -> Vec<ProviderReport> {
+    refresher.reports()
+}
 
 #[tauri::command]
-async fn get_usage(providers: tauri::State<'_, Providers>) -> Result<Vec<ProviderReport>, String> {
-    let providers = providers.0.clone();
-    tauri::async_runtime::spawn_blocking(move || providers::fetch_all(&providers))
-        .await
-        .map_err(|e| e.to_string())
+fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
+    settings.get()
+}
+
+#[tauri::command]
+fn set_show_percent_in_menu_bar(
+    app: AppHandle,
+    settings: State<'_, SettingsStore>,
+    refresher: State<'_, Refresher>,
+    show: bool,
+) -> Settings {
+    let updated = settings.update(|s| s.show_percent_in_menu_bar = show);
+    menu_bar::update(&app, &refresher.reports());
+    updated
 }
 
 fn toggle_panel(app: &AppHandle) {
@@ -51,6 +70,7 @@ fn toggle_panel(app: &AppHandle) {
         return;
     }
 
+    app.state::<Refresher>().refresh_if_stale();
     let _ = window.move_window(Position::TrayBottomCenter);
     let _ = window.show();
     let _ = window.set_focus();
@@ -62,14 +82,27 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
         .manage(PanelState::default())
-        .manage(Providers(Arc::new(providers::all())))
-        .invoke_handler(tauri::generate_handler![get_usage])
+        .manage(MenuBarState::default())
+        .invoke_handler(tauri::generate_handler![
+            get_usage,
+            get_settings,
+            set_show_percent_in_menu_bar
+        ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            TrayIconBuilder::with_id("main")
-                .icon(tauri::include_image!("icons/tray.png"))
+            let settings_path = app
+                .path()
+                .app_config_dir()
+                .ok()
+                .map(|dir| dir.join("settings.json"));
+            app.manage(SettingsStore::load(settings_path));
+            let (refresher, wake_rx) = Refresher::new();
+            app.manage(refresher);
+
+            let tray = TrayIconBuilder::with_id(menu_bar::TRAY_ID)
+                .icon(menu_bar::template_icon())
                 .icon_as_template(true)
                 .tooltip("Fitzroy")
                 .show_menu_on_left_click(false)
@@ -87,6 +120,10 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+            menu_bar::shrink_title_font(&tray);
+
+            let cache_dir = app.path().app_cache_dir().ok();
+            refresher::spawn(app.handle().clone(), providers::all(cache_dir), wake_rx);
 
             Ok(())
         })
