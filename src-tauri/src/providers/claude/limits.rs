@@ -63,6 +63,10 @@ pub struct LimitsState {
     /// 이 시각(Unix 밀리초) 전에는 API 를 부르지 않는다.
     next_attempt_at: i64,
     rate_limited_in_a_row: u32,
+    /// 가장 최근에 지난 재설정 시각. 재설정 뒤 사용률이 0이면 API 가 재설정 시각을 주지 않아서,
+    /// 전에 받아 둔 시각이 지나면 여기에 남겨 둔다.
+    session_reset_at: Option<i64>,
+    weekly_reset_at: Option<i64>,
     #[serde(skip)]
     pub last_error: Option<LimitsError>,
 }
@@ -90,7 +94,18 @@ impl LimitsState {
         now_ms >= self.next_attempt_at || self.next_attempt_at - now_ms > longest_wait
     }
 
+    /// 가장 최근에 지난 (세션, 주간) 재설정 시각.
+    pub fn passed_resets(&self, now_ms: i64) -> (Option<i64>, Option<i64>) {
+        let passed = |at: Option<i64>| at.filter(|&at| at <= now_ms);
+        let last = self.last.unwrap_or_default();
+        (
+            passed(last.session_resets_at).or(self.session_reset_at),
+            passed(last.weekly_resets_at).or(self.weekly_reset_at),
+        )
+    }
+
     pub fn record(&mut self, result: Result<Limits, LimitsError>, now_ms: i64) {
+        (self.session_reset_at, self.weekly_reset_at) = self.passed_resets(now_ms);
         let mut wait_ms = MIN_INTERVAL_MS;
         match result {
             Ok(limits) => {
@@ -383,6 +398,37 @@ mod tests {
         assert_eq!(after_session_reset.weekly_percent, Some(60.0));
 
         assert_eq!(limits.without_expired(5_000), Limits::default());
+    }
+
+    #[test]
+    fn remembers_passed_resets_after_new_values() {
+        let mut state = LimitsState::default();
+        assert_eq!(state.passed_resets(0), (None, None));
+
+        state.record(
+            Ok(Limits {
+                session_percent: Some(10.0),
+                session_resets_at: Some(1_000),
+                weekly_percent: Some(20.0),
+                weekly_resets_at: Some(9_000),
+            }),
+            0,
+        );
+        assert_eq!(state.passed_resets(999), (None, None));
+        assert_eq!(state.passed_resets(1_000), (Some(1_000), None));
+
+        // 재설정 뒤 0%가 되면 재설정 시각이 비어서 오지만, 지난 시각은 남는다.
+        state.record(
+            Ok(Limits {
+                session_percent: Some(0.0),
+                session_resets_at: None,
+                weekly_percent: Some(20.0),
+                weekly_resets_at: Some(9_000),
+            }),
+            2_000,
+        );
+        assert_eq!(state.passed_resets(2_000), (Some(1_000), None));
+        assert_eq!(state.passed_resets(9_000), (Some(1_000), Some(9_000)));
     }
 
     #[test]

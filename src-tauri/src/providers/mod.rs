@@ -52,6 +52,9 @@ pub struct Usage {
     pub session_resets_at: Option<i64>,
     pub weekly_percent: Option<f64>,
     pub weekly_resets_at: Option<i64>,
+    /// 가장 최근에 지난 재설정 시각. 다음 재설정 시각을 모를 때(사용률 0%) 대신 보여준다.
+    pub session_last_reset_at: Option<i64>,
+    pub weekly_last_reset_at: Option<i64>,
     pub tokens_today: Option<TokenUsage>,
     pub tokens_last_5h: Option<TokenUsage>,
     pub tokens_last_7d: Option<TokenUsage>,

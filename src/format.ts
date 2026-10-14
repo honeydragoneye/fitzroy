@@ -16,6 +16,18 @@ export function formatResetTime(ms: number, now = new Date()): string {
   return `${weekdayFormat.format(date)} ${time}`;
 }
 
+const monthDayFormat = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" });
+
+// 지난 시각. 오늘이면 "오늘 오후 2:30", 다른 날이면 "10월 13일 오후 7:30"
+export function formatPastTime(ms: number, now = new Date()): string {
+  const date = new Date(ms);
+  const time = timeFormat.format(date);
+  if (date.toDateString() === now.toDateString()) {
+    return `오늘 ${time}`;
+  }
+  return `${monthDayFormat.format(date)} ${time}`;
+}
+
 const dayFormat = new Intl.DateTimeFormat("ko-KR", {
   month: "numeric",
   day: "numeric",

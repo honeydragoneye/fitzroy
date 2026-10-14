@@ -41,9 +41,13 @@ impl ClaudeProvider {
         }
     }
 
-    /// 한도와 에러를 돌려준다. 호출을 쉬는 동안이나 실패했을 때는 마지막으로 받은 값을 쓰되,
-    /// 재설정 시각이 지난 값은 비운다.
-    fn limits(&self, config_dir: &ConfigDir, now_ms: i64) -> (Option<Limits>, Option<LimitsError>) {
+    /// 한도, 지난 (세션, 주간) 재설정 시각, 에러를 돌려준다. 호출을 쉬는 동안이나 실패했을 때는
+    /// 마지막으로 받은 값을 쓰되, 재설정 시각이 지난 값은 비운다.
+    fn limits(
+        &self,
+        config_dir: &ConfigDir,
+        now_ms: i64,
+    ) -> (Option<Limits>, (Option<i64>, Option<i64>), Option<LimitsError>) {
         let mut state = self.limits.lock().unwrap();
 
         if state.should_attempt(now_ms) {
@@ -55,7 +59,7 @@ impl ClaudeProvider {
         }
 
         let limits = state.last.map(|limits| limits.without_expired(now_ms));
-        (limits, state.last_error)
+        (limits, state.passed_resets(now_ms), state.last_error)
     }
 }
 
@@ -134,7 +138,9 @@ impl Provider for ClaudeProvider {
             Err(_) => errors.push("Claude Code 로그 폴더를 읽지 못했습니다".to_string()),
         }
 
-        let (limits, error) = self.limits(&config_dir, now);
+        let (limits, (session_reset_at, weekly_reset_at), error) = self.limits(&config_dir, now);
+        usage.session_last_reset_at = session_reset_at;
+        usage.weekly_last_reset_at = weekly_reset_at;
         if let Some(limits) = limits {
             usage.session_percent = limits.session_percent;
             usage.session_resets_at = limits.session_resets_at;

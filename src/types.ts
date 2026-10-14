@@ -24,6 +24,9 @@ export interface ProviderReport {
   sessionResetsAt: number | null;
   weeklyPercent: number | null;
   weeklyResetsAt: number | null;
+  // 가장 최근에 지난 재설정 시각. 다음 재설정 시각을 모를 때(사용률 0%) 대신 보여준다.
+  sessionLastResetAt: number | null;
+  weeklyLastResetAt: number | null;
   tokensToday: TokenUsage | null;
   tokensLast5h: TokenUsage | null;
   tokensLast7d: TokenUsage | null;

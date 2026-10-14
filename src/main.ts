@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { formatDay, formatResetTime, formatTokens, totalTokens } from "./format";
+import { formatDay, formatPastTime, formatResetTime, formatTokens, totalTokens } from "./format";
 import type { DailyTokens, ProviderReport } from "./types";
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -21,6 +21,7 @@ function limitRow(
   label: string,
   percent: number | null,
   resetsAt: number | null,
+  lastResetAt: number | null,
 ): HTMLElement | null {
   if (percent === null) return null;
 
@@ -29,6 +30,9 @@ function limitRow(
   head.append(el("span", "limit-label", label));
   if (resetsAt !== null) {
     head.append(el("span", "muted", `${formatResetTime(resetsAt)}에 재설정`));
+  } else if (lastResetAt !== null) {
+    // 재설정 뒤 아직 쓰지 않았으면 다음 재설정 시각이 없어서, 지난 재설정 시각을 보여준다.
+    head.append(el("span", "muted", `${formatPastTime(lastResetAt)}에 재설정됨`));
   }
 
   const bar = el("div", "bar");
@@ -93,8 +97,18 @@ function card(report: ProviderReport): HTMLElement {
   });
   node.append(title);
 
-  const session = limitRow("현재 세션", report.sessionPercent, report.sessionResetsAt);
-  const weekly = limitRow("이번 주", report.weeklyPercent, report.weeklyResetsAt);
+  const session = limitRow(
+    "현재 세션",
+    report.sessionPercent,
+    report.sessionResetsAt,
+    report.sessionLastResetAt,
+  );
+  const weekly = limitRow(
+    "이번 주",
+    report.weeklyPercent,
+    report.weeklyResetsAt,
+    report.weeklyLastResetAt,
+  );
   if (session) node.append(session);
   if (weekly) node.append(weekly);
 
@@ -102,11 +116,11 @@ function card(report: ProviderReport): HTMLElement {
     const t = report.tokensToday;
     node.append(
       el("div", "tokens", `오늘 ${formatTokens(totalTokens(t))} 토큰`),
+      el("div", "muted", `입력 ${formatTokens(t.input)} · 출력 ${formatTokens(t.output)}`),
       el(
         "div",
         "muted",
-        `입력 ${formatTokens(t.input)} · 출력 ${formatTokens(t.output)} · ` +
-          `캐시 쓰기 ${formatTokens(t.cacheWrite)} · 캐시 읽기 ${formatTokens(t.cacheRead)}`,
+        `캐시 쓰기 ${formatTokens(t.cacheWrite)} · 캐시 읽기 ${formatTokens(t.cacheRead)}`,
       ),
     );
   }
