@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { LogicalSize } from "@tauri-apps/api/dpi";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { formatDay, formatResetTime, formatTokens, totalTokens } from "./format";
-import type { DailyTokens, ProviderReport } from "./types";
+import type { DailyTokens, ProviderReport, Settings } from "./types";
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -134,16 +135,8 @@ function card(report: ProviderReport): HTMLElement {
   return node;
 }
 
-async function refresh() {
-  const container = document.querySelector<HTMLElement>("#cards");
-  if (!container) return;
-
-  try {
-    const reports = await invoke<ProviderReport[]>("get_usage");
-    container.replaceChildren(...reports.map(card));
-  } catch (e) {
-    container.replaceChildren(el("div", "muted error", `사용량을 가져오지 못했습니다: ${e}`));
-  }
+function render(reports: ProviderReport[]) {
+  document.querySelector<HTMLElement>("#cards")?.replaceChildren(...reports.map(card));
 }
 
 const PANEL_WIDTH = 300;
@@ -160,10 +153,25 @@ function fitWindowToContent(container: HTMLElement) {
   }).observe(container);
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  const container = document.querySelector<HTMLElement>("#cards");
+async function setUpMenuBarToggle() {
+  const toggle = document.querySelector<HTMLInputElement>("#show-percent");
+  if (!toggle) return;
+
+  toggle.checked = (await invoke<Settings>("get_settings")).showPercentInMenuBar;
+  toggle.addEventListener("change", async () => {
+    const settings = await invoke<Settings>("set_show_percent_in_menu_bar", {
+      show: toggle.checked,
+    });
+    toggle.checked = settings.showPercentInMenuBar;
+  });
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+  const container = document.querySelector<HTMLElement>("#app");
   if (container) fitWindowToContent(container);
-  void refresh();
+
+  // 값은 뒤에서 주기적으로 갱신되어 이벤트로 온다. 그 전까지는 마지막으로 받아 둔 값을 보여준다.
+  await listen<ProviderReport[]>("usage-updated", (event) => render(event.payload));
+  render(await invoke<ProviderReport[]>("get_usage"));
+  await setUpMenuBarToggle();
 });
-// 창이 열릴 때마다 최신 값으로 갱신
-window.addEventListener("focus", refresh);

@@ -32,3 +32,9 @@ export interface ProviderReport {
   dailyTokensThisWeek: DailyTokens[] | null;
   error: string | null;
 }
+
+// src-tauri/src/settings.rs 의 Settings 와 같은 형식
+export interface Settings {
+  showPercentInMenuBar: boolean;
+  refreshIntervalSecs: number;
+}
