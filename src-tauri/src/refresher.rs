@@ -44,10 +44,15 @@ impl Refresher {
         self.latest.lock().unwrap().reports.clone()
     }
 
+    /// 주기를 기다리지 않고 바로 다시 가져오게 한다.
+    pub fn refresh_now(&self) {
+        let _ = self.wake.send(());
+    }
+
     pub fn refresh_if_stale(&self) {
         let fetched_at = self.latest.lock().unwrap().fetched_at;
         if fetched_at.is_none_or(|at| at.elapsed() >= STALE_ON_OPEN) {
-            let _ = self.wake.send(());
+            self.refresh_now();
         }
     }
 }

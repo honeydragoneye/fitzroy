@@ -1,3 +1,4 @@
+mod app_menu;
 mod menu_bar;
 mod providers;
 mod refresher;
@@ -7,16 +8,17 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri::{AppHandle, LogicalPosition, Manager, State, WebviewWindow, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_positioner::{Position, WindowExt};
 
 use menu_bar::MenuBarState;
 use providers::ProviderReport;
 use refresher::Refresher;
-use settings::{Settings, SettingsStore};
+use settings::SettingsStore;
 
 const MAIN_WINDOW: &str = "main";
+const REPOSITORY_URL: &str = "https://github.com/imkmss/fitzroy";
 
 // 창이 열린 상태에서 트레이 아이콘을 누르면 포커스를 잃어 먼저 숨겨진 뒤 클릭 이벤트가 온다.
 // 이 간격 안에 온 클릭은 "닫기"로 보고 다시 열지 않는다.
@@ -45,21 +47,20 @@ fn open_usage_page(app: AppHandle, id: String) -> Result<(), String> {
     Err("사용량 화면을 열 수 없습니다".into())
 }
 
+/// 창 머리글의 메뉴 버튼 아래에 앱 메뉴를 띄운다. 위치는 창 왼쪽 위 기준이다.
 #[tauri::command]
-fn get_settings(settings: State<'_, SettingsStore>) -> Settings {
-    settings.get()
+fn show_app_menu(app: AppHandle, window: WebviewWindow, x: f64, y: f64) -> Result<(), String> {
+    let menu = app_menu::build(&app).map_err(|e| e.to_string())?;
+    window
+        .popup_menu_at(&menu, LogicalPosition::new(x, y))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn set_show_percent_in_menu_bar(
-    app: AppHandle,
-    settings: State<'_, SettingsStore>,
-    refresher: State<'_, Refresher>,
-    show: bool,
-) -> Settings {
-    let updated = settings.update(|s| s.show_percent_in_menu_bar = show);
-    menu_bar::update(&app, &refresher.reports());
-    updated
+fn open_repository(app: AppHandle) -> Result<(), String> {
+    app.opener()
+        .open_url(REPOSITORY_URL, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 fn toggle_panel(app: &AppHandle) {
@@ -94,14 +95,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
+        .plugin(tauri_plugin_autostart::Builder::new().build())
         .manage(PanelState::default())
         .manage(MenuBarState::default())
         .invoke_handler(tauri::generate_handler![
             get_usage,
-            get_settings,
+            open_repository,
             open_usage_page,
-            set_show_percent_in_menu_bar
+            show_app_menu
         ])
+        .on_menu_event(|app, event| app_menu::handle(app, event.id().as_ref()))
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);

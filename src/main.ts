@@ -1,9 +1,10 @@
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { LogicalSize } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { formatDay, formatResetTime, formatTokens, totalTokens } from "./format";
-import type { DailyTokens, ProviderReport, Settings } from "./types";
+import type { DailyTokens, ProviderReport } from "./types";
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -158,25 +159,45 @@ function fitWindowToContent(container: HTMLElement) {
   }).observe(container);
 }
 
-async function setUpMenuBarToggle() {
-  const toggle = document.querySelector<HTMLInputElement>("#show-percent");
-  if (!toggle) return;
+// 메뉴에서 "Fitzroy에 관하여"를 고르면 카드 대신 앱 정보를 보여준다.
+async function setUpAbout() {
+  const about = document.querySelector<HTMLElement>("#about");
+  const cards = document.querySelector<HTMLElement>("#cards");
+  if (!about || !cards) return;
 
-  toggle.checked = (await invoke<Settings>("get_settings")).showPercentInMenuBar;
-  toggle.addEventListener("change", async () => {
-    const settings = await invoke<Settings>("set_show_percent_in_menu_bar", {
-      show: toggle.checked,
-    });
-    toggle.checked = settings.showPercentInMenuBar;
+  const show = (visible: boolean) => {
+    about.hidden = !visible;
+    cards.hidden = visible;
+  };
+
+  const version = about.querySelector<HTMLElement>("#about-version");
+  if (version) version.textContent = `v${await getVersion()}`;
+
+  about.querySelector("#about-close")?.addEventListener("click", () => show(false));
+  about.querySelector("#about-repository")?.addEventListener("click", () => {
+    void invoke("open_repository").catch(() => {});
+  });
+  await listen("show-about", () => show(true));
+}
+
+// 머리글의 메뉴 버튼을 누르면 버튼 바로 아래에 앱 메뉴(종료 등)를 띄운다.
+function setUpAppMenu() {
+  const button = document.querySelector<HTMLButtonElement>("#app-menu");
+  if (!button) return;
+
+  button.addEventListener("click", () => {
+    const rect = button.getBoundingClientRect();
+    void invoke("show_app_menu", { x: rect.left, y: rect.bottom + 4 }).catch(() => {});
   });
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
   const container = document.querySelector<HTMLElement>("#app");
   if (container) fitWindowToContent(container);
+  setUpAppMenu();
 
   // 값은 뒤에서 주기적으로 갱신되어 이벤트로 온다. 그 전까지는 마지막으로 받아 둔 값을 보여준다.
   await listen<ProviderReport[]>("usage-updated", (event) => render(event.payload));
   render(await invoke<ProviderReport[]>("get_usage"));
-  await setUpMenuBarToggle();
+  await setUpAbout();
 });
