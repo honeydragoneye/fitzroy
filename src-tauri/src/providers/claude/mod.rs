@@ -10,6 +10,14 @@ use super::{now_ms, Provider, Usage};
 use limits::{Limits, LimitsError, LimitsState};
 use logs::LogReader;
 
+pub const ID: &str = "claude";
+
+/// 설정 > 사용량 화면. 설치된 Claude 앱으로 먼저 열고, 앱이 없으면 웹으로 연다.
+pub const USAGE_PAGE_URLS: &[&str] = &[
+    "claude://claude.ai/settings/usage",
+    "https://claude.ai/settings/usage",
+];
+
 const LIMITS_CACHE_FILE: &str = "claude-limits.json";
 
 pub struct ClaudeProvider {
@@ -98,7 +106,7 @@ fn today_and_week_starts(now_ms: i64) -> (i64, Vec<i64>) {
 
 impl Provider for ClaudeProvider {
     fn id(&self) -> &'static str {
-        "claude"
+        ID
     }
 
     fn name(&self) -> &'static str {

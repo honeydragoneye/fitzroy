@@ -85,7 +85,12 @@ function weekChart(days: DailyTokens[]): HTMLElement {
 
 function card(report: ProviderReport): HTMLElement {
   const node = el("section", "card");
-  node.append(el("h2", "card-title", report.name));
+  const title = el("button", "card-title", report.name);
+  title.title = `${report.name} 사용량 화면 열기`;
+  title.addEventListener("click", () => {
+    void invoke("open_usage_page", { id: report.id }).catch(() => {});
+  });
+  node.append(title);
 
   const session = limitRow("현재 세션", report.sessionPercent, report.sessionResetsAt);
   const weekly = limitRow("이번 주", report.weeklyPercent, report.weeklyResetsAt);

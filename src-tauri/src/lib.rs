@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State, WindowEvent};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_positioner::{Position, WindowExt};
 
 use menu_bar::MenuBarState;
@@ -30,6 +31,18 @@ struct PanelState {
 #[tauri::command]
 fn get_usage(refresher: State<'_, Refresher>) -> Vec<ProviderReport> {
     refresher.reports()
+}
+
+/// 서비스의 사용량 화면을 연다. 주소 목록은 앱이 정해 둔 것만 쓰고, 화면에서 받은 주소는 열지 않는다.
+#[tauri::command]
+fn open_usage_page(app: AppHandle, id: String) -> Result<(), String> {
+    let opener = app.opener();
+    for url in providers::usage_page_urls(&id) {
+        if opener.open_url(*url, None::<&str>).is_ok() {
+            return Ok(());
+        }
+    }
+    Err("사용량 화면을 열 수 없습니다".into())
 }
 
 #[tauri::command]
@@ -86,6 +99,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_usage,
             get_settings,
+            open_usage_page,
             set_show_percent_in_menu_bar
         ])
         .setup(|app| {

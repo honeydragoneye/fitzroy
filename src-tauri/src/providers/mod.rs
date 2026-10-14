@@ -91,6 +91,15 @@ pub fn all(cache_dir: Option<PathBuf>) -> Vec<Box<dyn Provider>> {
     vec![Box::new(ClaudeProvider::new(cache_dir))]
 }
 
+/// `id` 서비스의 사용량 화면 주소들. 앞의 것부터 열어 보고, 열 수 없으면 다음 것을 쓴다.
+/// 모르는 서비스면 비어 있다.
+pub fn usage_page_urls(id: &str) -> &'static [&'static str] {
+    match id {
+        claude::ID => claude::USAGE_PAGE_URLS,
+        _ => &[],
+    }
+}
+
 pub fn fetch_all(providers: &[Box<dyn Provider>]) -> Vec<ProviderReport> {
     providers
         .iter()
