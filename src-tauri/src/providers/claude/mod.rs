@@ -3,41 +3,51 @@ mod logs;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
 
 use chrono::{Datelike, Days, Local, NaiveDate, TimeZone};
 
 use super::{now_ms, Provider, Usage};
-use limits::{Limits, LimitsError};
+use limits::{Limits, LimitsError, LimitsState};
 use logs::LogReader;
 
-// 창을 열 때마다 갱신을 요청하므로 한도 API 는 이 간격보다 자주 부르지 않는다.
-const LIMITS_TTL: Duration = Duration::from_secs(60);
+const LIMITS_CACHE_FILE: &str = "claude-limits.json";
 
-#[derive(Default)]
 pub struct ClaudeProvider {
     logs: LogReader,
-    limits: Mutex<Option<(Instant, Limits)>>,
+    limits: Mutex<LimitsState>,
+    /// 한도 조회 상태를 저장할 파일. 캐시 폴더를 알 수 없으면 저장하지 않는다.
+    limits_cache: Option<PathBuf>,
 }
 
 impl ClaudeProvider {
-    /// 최근에 받은 값이 있으면 그대로 쓴다. 호출이 실패하면 마지막 값과 에러를 함께 돌려준다.
+    pub fn new(cache_dir: Option<PathBuf>) -> Self {
+        let limits_cache = cache_dir.map(|dir| dir.join(LIMITS_CACHE_FILE));
+        let limits = limits_cache
+            .as_deref()
+            .map(LimitsState::load)
+            .unwrap_or_default();
+        ClaudeProvider {
+            logs: LogReader::default(),
+            limits: Mutex::new(limits),
+            limits_cache,
+        }
+    }
+
+    /// 한도와 에러를 돌려준다. 호출을 쉬는 동안이나 실패했을 때는 마지막으로 받은 값을 쓰되,
+    /// 재설정 시각이 지난 값은 비운다.
     fn limits(&self, config_dir: &ConfigDir, now_ms: i64) -> (Option<Limits>, Option<LimitsError>) {
-        let mut cached = self.limits.lock().unwrap();
-        if let Some((at, limits)) = *cached {
-            if at.elapsed() < LIMITS_TTL {
-                return (Some(limits), None);
+        let mut state = self.limits.lock().unwrap();
+
+        if state.should_attempt(now_ms) {
+            let token = limits::read_access_token(&config_dir.path, config_dir.is_default, now_ms);
+            state.record(token.and_then(|token| limits::fetch(&token)), now_ms);
+            if let Some(path) = &self.limits_cache {
+                state.save(path);
             }
         }
 
-        let token = limits::read_access_token(&config_dir.path, config_dir.is_default, now_ms);
-        match token.and_then(|token| limits::fetch(&token)) {
-            Ok(limits) => {
-                *cached = Some((Instant::now(), limits));
-                (Some(limits), None)
-            }
-            Err(error) => (cached.map(|(_, limits)| limits), Some(error)),
-        }
+        let limits = state.last.map(|limits| limits.without_expired(now_ms));
+        (limits, state.last_error)
     }
 }
 

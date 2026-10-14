@@ -1,5 +1,7 @@
 mod claude;
 
+use std::path::PathBuf;
+
 use serde::Serialize;
 
 pub use claude::ClaudeProvider;
@@ -84,8 +86,9 @@ pub struct ProviderReport {
     pub usage: Usage,
 }
 
-pub fn all() -> Vec<Box<dyn Provider>> {
-    vec![Box::new(ClaudeProvider::default())]
+/// `cache_dir` 는 Provider 가 앱을 다시 켜도 이어 갈 상태를 저장하는 폴더다.
+pub fn all(cache_dir: Option<PathBuf>) -> Vec<Box<dyn Provider>> {
+    vec![Box::new(ClaudeProvider::new(cache_dir))]
 }
 
 pub fn fetch_all(providers: &[Box<dyn Provider>]) -> Vec<ProviderReport> {

@@ -11,14 +11,15 @@ use std::path::Path;
 use std::time::Duration;
 
 use chrono::DateTime;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const USAGE_URL: &str = "https://api.anthropic.com/api/oauth/usage";
 const OAUTH_BETA: &str = "oauth-2025-04-20";
 const USER_AGENT: &str = concat!("fitzroy/", env!("CARGO_PKG_VERSION"));
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Limits {
     pub session_percent: Option<f64>,
     pub session_resets_at: Option<i64>,
@@ -26,13 +27,94 @@ pub struct Limits {
     pub weekly_resets_at: Option<i64>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LimitsError {
     NotLoggedIn,
     TokenExpired,
     RateLimited,
     Network,
     UnexpectedResponse,
+}
+
+impl Limits {
+    /// 재설정 시각이 지난 값은 더 이상 맞지 않으므로 비운다.
+    pub fn without_expired(mut self, now_ms: i64) -> Self {
+        if self.session_resets_at.is_some_and(|at| at <= now_ms) {
+            self.session_percent = None;
+            self.session_resets_at = None;
+        }
+        if self.weekly_resets_at.is_some_and(|at| at <= now_ms) {
+            self.weekly_percent = None;
+            self.weekly_resets_at = None;
+        }
+        self
+    }
+}
+
+/// 갱신 요청이 몰려도 한도 API 는 이 간격보다 자주 부르지 않는다.
+const MIN_INTERVAL_MS: i64 = 30_000;
+
+/// 한도 조회의 진행 상태. 파일로 저장해서 앱을 다시 켜도 마지막 값과 대기 시간이 이어진다.
+/// 앱을 켤 때마다 API 를 부르면 금방 요청이 거부되기 때문이다.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LimitsState {
+    pub last: Option<Limits>,
+    /// 이 시각(Unix 밀리초) 전에는 API 를 부르지 않는다.
+    next_attempt_at: i64,
+    rate_limited_in_a_row: u32,
+    #[serde(skip)]
+    pub last_error: Option<LimitsError>,
+}
+
+impl LimitsState {
+    pub fn load(path: &Path) -> Self {
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self, path: &Path) {
+        if let Some(dir) = path.parent() {
+            let _ = fs::create_dir_all(dir);
+        }
+        if let Ok(json) = serde_json::to_string(self) {
+            let _ = fs::write(path, json);
+        }
+    }
+
+    pub fn should_attempt(&self, now_ms: i64) -> bool {
+        // 시계가 뒤로 바뀌어 대기 시간이 터무니없이 길어졌으면 무시한다.
+        let longest_wait = rate_limit_delay(u32::MAX).as_millis() as i64;
+        now_ms >= self.next_attempt_at || self.next_attempt_at - now_ms > longest_wait
+    }
+
+    pub fn record(&mut self, result: Result<Limits, LimitsError>, now_ms: i64) {
+        let mut wait_ms = MIN_INTERVAL_MS;
+        match result {
+            Ok(limits) => {
+                self.last = Some(limits);
+                self.last_error = None;
+                self.rate_limited_in_a_row = 0;
+            }
+            Err(error) => {
+                self.last_error = Some(error);
+                if error == LimitsError::RateLimited {
+                    self.rate_limited_in_a_row += 1;
+                    wait_ms = rate_limit_delay(self.rate_limited_in_a_row).as_millis() as i64;
+                }
+            }
+        }
+        self.next_attempt_at = now_ms + wait_ms;
+    }
+}
+
+/// 요청이 거부(429)됐을 때 다음 시도까지 기다릴 시간. 거부가 이어질수록 2분, 4분, 8분, 최대 10분.
+pub fn rate_limit_delay(consecutive: u32) -> Duration {
+    const BASE: Duration = Duration::from_secs(120);
+    const MAX: Duration = Duration::from_secs(600);
+    BASE.saturating_mul(1 << consecutive.saturating_sub(1).min(8)).min(MAX)
 }
 
 impl fmt::Display for LimitsError {
@@ -283,6 +365,96 @@ mod tests {
             value(first_usable(Err(LimitsError::NotLoggedIn), || Err(LimitsError::NotLoggedIn))),
             Err(LimitsError::NotLoggedIn)
         );
+    }
+
+    #[test]
+    fn expired_windows_are_cleared() {
+        let limits = Limits {
+            session_percent: Some(40.0),
+            session_resets_at: Some(1_000),
+            weekly_percent: Some(60.0),
+            weekly_resets_at: Some(5_000),
+        };
+        assert_eq!(limits.without_expired(999), limits);
+
+        let after_session_reset = limits.without_expired(1_000);
+        assert_eq!(after_session_reset.session_percent, None);
+        assert_eq!(after_session_reset.session_resets_at, None);
+        assert_eq!(after_session_reset.weekly_percent, Some(60.0));
+
+        assert_eq!(limits.without_expired(5_000), Limits::default());
+    }
+
+    #[test]
+    fn rate_limit_delay_doubles_up_to_ten_minutes() {
+        let secs = |n| rate_limit_delay(n).as_secs();
+        assert_eq!([secs(1), secs(2), secs(3), secs(4), secs(50)], [120, 240, 480, 600, 600]);
+    }
+
+    #[test]
+    fn state_throttles_and_backs_off() {
+        let ok = Limits {
+            session_percent: Some(10.0),
+            ..Limits::default()
+        };
+        let mut state = LimitsState::default();
+        assert!(state.should_attempt(0));
+
+        state.record(Ok(ok), 1_000);
+        assert_eq!(state.last, Some(ok));
+        assert!(!state.should_attempt(30_999));
+        assert!(state.should_attempt(31_000));
+
+        // 거부가 이어지면 대기가 길어지고, 마지막으로 받은 값은 남는다.
+        state.record(Err(LimitsError::RateLimited), 31_000);
+        assert!(!state.should_attempt(31_000 + 119_999));
+        assert!(state.should_attempt(31_000 + 120_000));
+        state.record(Err(LimitsError::RateLimited), 200_000);
+        assert!(!state.should_attempt(200_000 + 239_999));
+        assert_eq!(state.last, Some(ok));
+        assert_eq!(state.last_error, Some(LimitsError::RateLimited));
+
+        // 다른 에러는 짧게만 쉬고, 성공하면 처음으로 돌아간다.
+        state.record(Err(LimitsError::Network), 500_000);
+        assert!(state.should_attempt(530_000));
+        state.record(Ok(ok), 530_000);
+        assert_eq!(state.last_error, None);
+        state.record(Err(LimitsError::RateLimited), 600_000);
+        assert!(state.should_attempt(600_000 + 120_000));
+
+        // 시계가 크게 뒤로 가면 기다리지 않는다.
+        assert!(state.should_attempt(0));
+    }
+
+    #[test]
+    fn state_survives_restart() {
+        let dir = std::env::temp_dir().join(format!("fitzroy-limits-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let path = dir.join("cache/claude-limits.json");
+        assert_eq!(LimitsState::load(&path), LimitsState::default());
+
+        let mut state = LimitsState::default();
+        state.record(
+            Ok(Limits {
+                session_percent: Some(12.0),
+                session_resets_at: Some(9_000_000),
+                ..Limits::default()
+            }),
+            1_000,
+        );
+        state.record(Err(LimitsError::RateLimited), 40_000);
+        state.save(&path);
+
+        let loaded = LimitsState::load(&path);
+        assert_eq!(loaded.last, state.last);
+        assert!(!loaded.should_attempt(40_000 + 119_999));
+        assert!(loaded.should_attempt(40_000 + 120_000));
+        // 에러 문구는 저장하지 않는다.
+        assert_eq!(loaded.last_error, None);
+
+        fs::write(&path, "broken").unwrap();
+        assert_eq!(LimitsState::load(&path), LimitsState::default());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     /// 실제 토큰으로 API 를 호출해 값을 출력한다. claude.ai 설정 화면과 대조할 때 쓴다.
