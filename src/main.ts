@@ -198,7 +198,7 @@ async function setUpAbout() {
   about.querySelector("#about-repository")?.addEventListener("click", () => {
     void invoke("open_repository").catch(() => {});
   });
-  // 메뉴에서 "업데이트 확인…"을 고르면 앱 정보 화면에 결과를 보여준다.
+  // 메뉴에서 "업데이트 확인"을 고르면 앱 정보 화면에 결과를 보여준다.
   const update = about.querySelector<HTMLElement>("#about-update");
   await listen<UpdateStatus>("update-status", ({ payload }) => {
     if (!update) return;

@@ -31,7 +31,7 @@ export interface Release {
   url: string;
 }
 
-// 메뉴에서 "업데이트 확인…"을 골랐을 때의 진행 상황
+// 메뉴에서 "업데이트 확인"을 골랐을 때의 진행 상황
 export type UpdateStatus =
   | { state: "checking" }
   | { state: "upToDate" }

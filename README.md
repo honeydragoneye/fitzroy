@@ -54,11 +54,11 @@ Fitzroy runs only in the menu bar and has no Dock icon. To quit it, open the pan
 
 Once a week, Fitzroy asks GitHub for the latest release version. It sends no account information. When a newer version is out, a notice appears at the top of the panel. Click it to open the release page, download the new `.dmg`, and drag Fitzroy into Applications again to replace the old copy.
 
-To check right away, choose **Check for Updates…** from the menu. To stop the weekly check, turn off **Check for Updates Automatically** in the same menu.
+To check right away, choose **Check for Updates** from the menu. To stop the weekly check, turn off **Check for Updates Automatically** in the same menu.
 
 ## Feedback
 
-To report a problem, choose **Report a Problem 🕊️…** from the menu. Fitzroy opens a new message in your mail app with a short form and some diagnostic details filled in: the app and macOS versions, the selected service, the refresh interval, and whether each service has limit values or an error message. It never includes tokens, account details, conversation content, or usage numbers. Fitzroy does not send the message itself. You can review and edit it before you send it. You can also write to myyseooo@gmail.com directly.
+To report a problem, choose **Report a Problem 🕊️** from the menu. Fitzroy opens a new message in your mail app with a short form and some diagnostic details filled in: the app and macOS versions, the selected service, the refresh interval, and whether each service has limit values or an error message. It never includes tokens, account details, conversation content, or usage numbers. Fitzroy does not send the message itself. You can review and edit it before you send it. You can also write to myyseooo@gmail.com directly.
 
 ## Build from source
 
