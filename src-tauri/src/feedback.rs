@@ -1,4 +1,4 @@
-//! 문제 신고: 사용자의 메일 앱에 양식과 진단 정보를 채운 새 메일을 연다.
+//! 문제 신고와 제안: 사용자의 메일 앱에 양식과 진단 정보를 채운 새 메일을 연다.
 //! 앱은 메일을 직접 보내지 않는다. 사용자가 내용을 보고 고친 뒤 직접 보낸다.
 //! 진단 정보에는 토큰, 계정, 대화 내용, 사용량 숫자를 넣지 않는다.
 
@@ -78,10 +78,10 @@ fn page_name(page: &str) -> &str {
 fn body(info: &Diagnostics) -> String {
     let mut lines = vec![
         "어떤 일이 있었나요?".to_string(),
-        "(여기에 적어 주세요)".to_string(),
+        "(지우고 여기에 적어 주세요 !!)".to_string(),
         String::new(),
         "기대한 동작은 무엇이었나요?".to_string(),
-        "(여기에 적어 주세요)".to_string(),
+        "(지우고 여기에 적어 주세요 !!)".to_string(),
         String::new(),
         "──────── 진단 정보 (자동 입력) ────────".to_string(),
         format!(
@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn body_has_form_and_diagnostics() {
         let body = body(&sample());
-        assert!(body.starts_with("어떤 일이 있었나요?\n(여기에 적어 주세요)\n\n"));
+        assert!(body.starts_with("어떤 일이 있었나요?\n(지우고 여기에 적어 주세요 !!)\n\n"));
         assert!(body.contains("Fitzroy 0.1.1 · macOS 15.6 · aarch64"));
         assert!(body.contains("보고 있는 서비스: Claude · 갱신 주기: 1분"));
         assert!(body.contains("Claude: 한도 값 있음 · 에러 없음"));
