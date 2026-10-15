@@ -42,7 +42,7 @@ The app is not signed with an Apple Developer ID, so macOS blocks it the first t
 2. Open **System Settings → Privacy & Security**.
 3. Scroll down and click **Open Anyway** next to the message about Fitzroy, then confirm.
 
-You can also clear the quarantine flag in Terminal:
+You can also clear the quarantine flag in Terminal. Do this if macOS says Fitzroy "is damaged and can't be opened," which happens with version 0.1.0:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Fitzroy.app
