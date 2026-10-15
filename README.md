@@ -73,3 +73,7 @@ To run it in development mode:
 ```sh
 npm run tauri dev
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
