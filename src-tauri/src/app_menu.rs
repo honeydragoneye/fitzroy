@@ -84,7 +84,10 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         ],
     )?;
 
-    // 맨 위에 창에 보여줄 서비스를 고르는 항목을 둔다.
+    // 맨 위에 창에 보여줄 서비스를 고르는 항목을 둔다. 서비스가 하나뿐이면 두지 않는다.
+    if providers::PAGES.len() < 2 {
+        return Ok(menu);
+    }
     let page_items = providers::PAGES
         .iter()
         .map(|(id, name)| {

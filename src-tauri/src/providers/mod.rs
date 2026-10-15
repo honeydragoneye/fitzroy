@@ -1,4 +1,6 @@
 mod claude;
+// Codex 는 0.1.0 에서 뺐다. 코드는 남겨 두고 `all` 과 `PAGES` 에 넣으면 다시 켜진다.
+#[allow(dead_code)]
 mod codex;
 
 use std::path::PathBuf;
@@ -6,7 +8,6 @@ use std::path::PathBuf;
 use serde::Serialize;
 
 pub use claude::ClaudeProvider;
-pub use codex::CodexProvider;
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,14 +104,11 @@ pub struct ProviderReport {
 
 /// `cache_dir` 는 Provider 가 앱을 다시 켜도 이어 갈 상태를 저장하는 폴더다.
 pub fn all(cache_dir: Option<PathBuf>) -> Vec<Box<dyn Provider>> {
-    vec![
-        Box::new(ClaudeProvider::new(cache_dir)),
-        Box::new(CodexProvider::default()),
-    ]
+    vec![Box::new(ClaudeProvider::new(cache_dir))]
 }
 
 /// 창에서 고를 수 있는 서비스 (id, 이름). `all` 과 같은 순서다.
-pub const PAGES: &[(&str, &str)] = &[(claude::ID, claude::NAME), (codex::ID, codex::NAME)];
+pub const PAGES: &[(&str, &str)] = &[(claude::ID, claude::NAME)];
 
 /// `id` 서비스의 사용량 화면 주소들. 앞의 것부터 열어 보고, 열 수 없으면 다음 것을 쓴다.
 /// 모르는 서비스면 비어 있다.

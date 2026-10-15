@@ -1,34 +1,25 @@
 # Fitzroy
 
-A macOS menu bar app that shows your Claude and Codex usage at a glance.
+A macOS menu bar app that shows your Claude usage at a glance.
 
 The icon is modeled on Mount Fitz Roy in Patagonia. At sunrise its granite peaks glow red, which Korean hikers call the "burning sweet potato." Fitzroy borrows that look. While you have plenty of room, the mountain sits in plain daylight. As your session usage gets close to its limit, the peaks turn from gold to a deep sunset red.
 
-Click the icon to open a panel. Choose **Claude** or **Codex** from the menu in the top right to switch between them. The number in the menu bar follows the one you choose.
-
-**Claude**
+Click the icon to open a panel. The number in the menu bar is your current session usage.
 
 - Current session and weekly limit usage, with reset times
 - Token usage today, over the last 5 hours, and over the last 7 days
 - Daily token usage for this week
 
-**Codex**
-
-- Usage limits and reset times, read from the Codex CLI's local session logs
-- The values update only when you use the Codex CLI on this Mac. The panel shows when they were last updated.
-
-> [!IMPORTANT]
-> Codex support was built and tested on the ChatGPT **Go** plan only, which has a single 30-day limit. Plus and Pro plans have different limits, such as 5-hour and weekly windows. Fitzroy should show them, but this has not been tested. If they look wrong, please [open an issue](https://github.com/honeydragoneye/fitzroy/issues).
+Support for Codex and Gemini is planned for a future version.
 
 > [!NOTE]
-> Fitzroy is an unofficial app. It is not affiliated with Anthropic or OpenAI. It relies on undocumented APIs and local log formats, so it may stop working at any time.
+> Fitzroy is an unofficial app. It is not affiliated with Anthropic, OpenAI, or Google. It relies on undocumented APIs and local log formats, so it may stop working at any time.
 
 ## Requirements
 
 - macOS 13 or later
 - A Mac with Apple silicon (M1 or later). Intel Macs are not supported yet.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code), installed and logged in. Fitzroy reads the usage limits with Claude Code's login and reads token counts from Claude Code's local logs.
-- For Codex: the [Codex CLI](https://github.com/openai/codex), logged in with a ChatGPT account. Fitzroy reads only its local session logs and sends nothing over the network for Codex.
 
 ## Install
 
@@ -42,7 +33,7 @@ The app is not signed with an Apple Developer ID, so macOS blocks it the first t
 2. Open **System Settings → Privacy & Security**.
 3. Scroll down and click **Open Anyway** next to the message about Fitzroy, then confirm.
 
-You can also clear the quarantine flag in Terminal. Do this if macOS says Fitzroy "is damaged and can't be opened," which happens with version 0.1.0:
+You can also clear the quarantine flag in Terminal. Do this if macOS says Fitzroy "is damaged and can't be opened":
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/Fitzroy.app
@@ -58,7 +49,7 @@ To check right away, choose **Check for Updates** from the menu. To stop the wee
 
 ## Feedback
 
-To report a problem, choose **Report a Problem 🕊️** from the menu. Fitzroy opens a new message in your mail app with a short form and some diagnostic details filled in: the app and macOS versions, the selected service, the refresh interval, and whether each service has limit values or an error message. It never includes tokens, account details, conversation content, or usage numbers. Fitzroy does not send the message itself. You can review and edit it before you send it. You can also write to myyseooo@gmail.com directly.
+To report a problem, choose **Report a Problem 🕊️** from the menu. Fitzroy opens a new message in your mail app with a short form and some diagnostic details filled in: the app and macOS versions, the refresh interval, and whether Fitzroy has limit values or an error message. It never includes tokens, account details, conversation content, or usage numbers. Fitzroy does not send the message itself. You can review and edit it before you send it. You can also write to myyseooo@gmail.com directly.
 
 ## Build from source
 

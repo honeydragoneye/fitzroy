@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::providers;
+
 const MIN_REFRESH_INTERVAL_SECS: u64 = 30;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -38,6 +40,15 @@ impl Settings {
     }
 }
 
+/// 저장된 서비스가 지금 앱에 없으면(예: 뺀 서비스) 첫 서비스를 쓴다.
+fn known_page(page: String) -> String {
+    if providers::PAGES.iter().any(|(id, _)| *id == page) {
+        page
+    } else {
+        providers::PAGES[0].0.to_string()
+    }
+}
+
 pub struct SettingsStore {
     /// 설정 폴더를 알 수 없으면 None. 그때는 저장하지 않고 메모리에서만 유지한다.
     path: Option<PathBuf>,
@@ -47,11 +58,15 @@ pub struct SettingsStore {
 impl SettingsStore {
     /// 파일이 없거나 읽을 수 없으면 기본값으로 시작한다.
     pub fn load(path: Option<PathBuf>) -> Self {
-        let current = path
+        let current: Settings = path
             .as_ref()
             .and_then(|path| fs::read_to_string(path).ok())
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_default();
+        let current = Settings {
+            page: known_page(current.page),
+            ..current
+        };
         SettingsStore {
             path,
             current: Mutex::new(current),
@@ -116,6 +131,12 @@ mod tests {
         assert!(!SettingsStore::load(Some(path)).get().show_percent_in_menu_bar);
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn unknown_page_falls_back_to_first_service() {
+        assert_eq!(known_page("claude".to_string()), "claude");
+        assert_eq!(known_page("nothing".to_string()), providers::PAGES[0].0);
     }
 
     #[test]
