@@ -26,6 +26,7 @@ Click the icon to open a panel. Choose **Claude** or **Codex** from the menu in 
 ## Requirements
 
 - macOS 13 or later
+- A Mac with Apple silicon (M1 or later). Intel Macs are not supported yet.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code), installed and logged in. Fitzroy reads the usage limits with Claude Code's login and reads token counts from Claude Code's local logs.
 - For Codex: the [Codex CLI](https://github.com/openai/codex), logged in with a ChatGPT account. Fitzroy reads only its local session logs and sends nothing over the network for Codex.
 
