@@ -1,4 +1,5 @@
 mod app_menu;
+mod feedback;
 mod menu_bar;
 mod providers;
 mod refresher;

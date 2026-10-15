@@ -56,6 +56,10 @@ Once a week, Fitzroy asks GitHub for the latest release version. It sends no acc
 
 To check right away, choose **Check for Updates…** from the menu. To stop the weekly check, turn off **Check for Updates Automatically** in the same menu.
 
+## Feedback
+
+To report a problem, choose **Report a Problem 🕊️…** from the menu. Fitzroy opens a new message in your mail app with a short form and some diagnostic details filled in: the app and macOS versions, the selected service, the refresh interval, and whether each service has limit values or an error message. It never includes tokens, account details, conversation content, or usage numbers. Fitzroy does not send the message itself. You can review and edit it before you send it. You can also write to myyseooo@gmail.com directly.
+
 ## Build from source
 
 You need [Rust](https://www.rust-lang.org/tools/install), [Node.js](https://nodejs.org/) 20.19 or later, and the Xcode Command Line Tools (`xcode-select --install`).

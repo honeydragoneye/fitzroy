@@ -4,6 +4,7 @@ use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem,
 use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_autostart::ManagerExt;
 
+use crate::feedback;
 use crate::menu_bar;
 use crate::providers;
 use crate::refresher::Refresher;
@@ -19,6 +20,7 @@ const REFRESH_NOW: &str = "refresh-now";
 const SHOW_PERCENT: &str = "show-percent";
 const AUTOSTART: &str = "autostart";
 const CHECK_UPDATES_NOW: &str = "check-updates-now";
+const SEND_FEEDBACK: &str = "send-feedback";
 const AUTO_CHECK_UPDATES: &str = "auto-check-updates";
 const ABOUT: &str = "about";
 const QUIT: &str = "quit";
@@ -76,6 +78,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, CHECK_UPDATES_NOW, "업데이트 확인…", true, None::<&str>)?,
+            &MenuItem::with_id(app, SEND_FEEDBACK, "문제 신고 🕊️…", true, None::<&str>)?,
             &MenuItem::with_id(app, ABOUT, "Fitzroy에 관하여", true, None::<&str>)?,
             &MenuItem::with_id(app, QUIT, "Fitzroy 종료", true, None::<&str>)?,
         ],
@@ -130,6 +133,7 @@ pub fn handle(app: &AppHandle, id: &str) {
             let _ = app.emit(SHOW_ABOUT, ());
             app.state::<Updates>().check_now();
         }
+        SEND_FEEDBACK => feedback::open_mail(app),
         ABOUT => {
             let _ = app.emit(SHOW_ABOUT, ());
         }
