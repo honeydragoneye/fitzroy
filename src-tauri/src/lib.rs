@@ -20,7 +20,7 @@ use settings::SettingsStore;
 use updates::{Release, Updates};
 
 const MAIN_WINDOW: &str = "main";
-const REPOSITORY_URL: &str = "https://github.com/imkmss/fitzroy";
+const REPOSITORY_URL: &str = "https://github.com/honeydragoneye/fitzroy";
 
 // 창이 열린 상태에서 트레이 아이콘을 누르면 포커스를 잃어 먼저 숨겨진 뒤 클릭 이벤트가 온다.
 // 이 간격 안에 온 클릭은 "닫기"로 보고 다시 열지 않는다.

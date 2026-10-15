@@ -16,9 +16,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::providers::now_ms;
 use crate::settings::SettingsStore;
 
-const LATEST_URL: &str = "https://api.github.com/repos/imkmss/fitzroy/releases/latest";
+const LATEST_URL: &str = "https://api.github.com/repos/honeydragoneye/fitzroy/releases/latest";
 /// 릴리스 페이지 주소는 이 저장소 안의 것만 연다.
-const RELEASES_PAGE_PREFIX: &str = "https://github.com/imkmss/fitzroy/releases/";
+const RELEASES_PAGE_PREFIX: &str = "https://github.com/honeydragoneye/fitzroy/releases/";
 const USER_AGENT: &str = concat!("fitzroy/", env!("CARGO_PKG_VERSION"));
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -276,12 +276,12 @@ mod tests {
     #[test]
     fn parses_release_response() {
         let json = r#"{"tag_name":"v0.2.0","name":"Fitzroy 0.2.0","draft":false,"prerelease":false,
-            "html_url":"https://github.com/imkmss/fitzroy/releases/tag/v0.2.0","assets":[]}"#;
+            "html_url":"https://github.com/honeydragoneye/fitzroy/releases/tag/v0.2.0","assets":[]}"#;
         assert_eq!(
             parse_release(json),
             Ok(Release {
                 version: "0.2.0".to_string(),
-                url: "https://github.com/imkmss/fitzroy/releases/tag/v0.2.0".to_string(),
+                url: "https://github.com/honeydragoneye/fitzroy/releases/tag/v0.2.0".to_string(),
             })
         );
     }
@@ -289,7 +289,7 @@ mod tests {
     #[test]
     fn rejects_unexpected_release_response() {
         let other_site = r#"{"tag_name":"v0.2.0","html_url":"https://example.com/releases/v0.2.0"}"#;
-        let bad_tag = r#"{"tag_name":"latest","html_url":"https://github.com/imkmss/fitzroy/releases/tag/latest"}"#;
+        let bad_tag = r#"{"tag_name":"latest","html_url":"https://github.com/honeydragoneye/fitzroy/releases/tag/latest"}"#;
         for json in [other_site, bad_tag, r#"{"message":"Not Found"}"#, "not json"] {
             assert_eq!(parse_release(json), Err(CheckError::UnexpectedResponse), "{json}");
         }

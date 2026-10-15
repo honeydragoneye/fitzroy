@@ -18,7 +18,7 @@ Click the icon to open a panel. Choose **Claude** or **Codex** from the menu in 
 - The values update only when you use the Codex CLI on this Mac. The panel shows when they were last updated.
 
 > [!IMPORTANT]
-> Codex support was built and tested on the ChatGPT **Go** plan only, which has a single 30-day limit. Plus and Pro plans have different limits, such as 5-hour and weekly windows. Fitzroy should show them, but this has not been tested. If they look wrong, please [open an issue](https://github.com/imkmss/fitzroy/issues).
+> Codex support was built and tested on the ChatGPT **Go** plan only, which has a single 30-day limit. Plus and Pro plans have different limits, such as 5-hour and weekly windows. Fitzroy should show them, but this has not been tested. If they look wrong, please [open an issue](https://github.com/honeydragoneye/fitzroy/issues).
 
 > [!NOTE]
 > Fitzroy is an unofficial app. It is not affiliated with Anthropic or OpenAI. It relies on undocumented APIs and local log formats, so it may stop working at any time.
@@ -31,7 +31,7 @@ Click the icon to open a panel. Choose **Claude** or **Codex** from the menu in 
 
 ## Install
 
-1. Download the latest `.dmg` from [Releases](https://github.com/imkmss/fitzroy/releases).
+1. Download the latest `.dmg` from [Releases](https://github.com/honeydragoneye/fitzroy/releases).
 2. Open the `.dmg` and drag **Fitzroy** into **Applications**.
 3. Open Fitzroy from Applications.
 
@@ -60,7 +60,7 @@ To check right away, choose **Check for Updates…** from the menu. To stop the 
 You need [Rust](https://www.rust-lang.org/tools/install), [Node.js](https://nodejs.org/) 20.19 or later, and the Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
-git clone https://github.com/imkmss/fitzroy.git
+git clone https://github.com/honeydragoneye/fitzroy.git
 cd fitzroy
 npm install
 npm run tauri build
