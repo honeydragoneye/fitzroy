@@ -10,9 +10,10 @@ use crate::settings::SettingsStore;
 
 pub const TRAY_ID: &str = "main";
 
-/// 낮(노을 없음)의 바위: 햇빛 받은 화강암 꼭대기와 푸른 그늘이 진 아래쪽
+/// 낮(노을 없음)의 바위: 햇빛 받은 화강암 꼭대기와 갈색빛 그늘이 진 아래쪽.
+/// 아래쪽은 햇빛이 닿지 않아 노을이 져도 그늘색 그대로 둔다.
 const DAY_TOP: [u8; 3] = [214, 184, 150];
-const DAY_BOTTOM: [u8; 3] = [104, 116, 134];
+const DAY_BOTTOM: [u8; 3] = [118, 110, 102];
 
 /// 이 사용률까지는 낮이고, 노을 시작까지 낮에서 노을로 넘어간다.
 const DAY_UNTIL_PERCENT: f64 = 40.0;
@@ -29,9 +30,8 @@ const GLOW_STOPS: &[(f64, [u8; 3])] = &[
     (100.0, [168, 26, 0]),
 ];
 
-/// 노을 바위의 꼭대기는 노을 색보다 밝게, 바닥은 어둡게 칠한다.
+/// 노을 바위의 꼭대기는 노을 색보다 밝게 칠한다.
 const TOP_LIGHT: f64 = 1.15;
-const BOTTOM_SHADE: f64 = 0.7;
 
 /// 봉우리 안쪽에서 능선을 나누는 틈에 채우는 눈 색
 const SNOW: [u8; 3] = [255, 255, 255];
@@ -77,16 +77,12 @@ fn scale(color: [u8; 3], factor: f64) -> [u8; 3] {
     color.map(|c| (f64::from(c) * factor).round().min(255.0) as u8)
 }
 
-/// 사용률에 따른 바위의 꼭대기 색과 바닥 색
+/// 사용률에 따른 바위의 꼭대기 색과 바닥 색. 바닥은 늘 그늘색이다.
 fn rock_colors(level: u8) -> ([u8; 3], [u8; 3]) {
-    let glow = glow_color(level);
-    let (glow_top, glow_bottom) = (scale(glow, TOP_LIGHT), scale(glow, BOTTOM_SHADE));
+    let glow_top = scale(glow_color(level), TOP_LIGHT);
     let t = ((f64::from(level) - DAY_UNTIL_PERCENT) / (GLOW_START_PERCENT - DAY_UNTIL_PERCENT))
         .clamp(0.0, 1.0);
-    (
-        mix_color(DAY_TOP, glow_top, t),
-        mix_color(DAY_BOTTOM, glow_bottom, t),
-    )
+    (mix_color(DAY_TOP, glow_top, t), DAY_BOTTOM)
 }
 
 /// 메뉴 막대에 띄울 값: 창에서 고른 서비스(`page`)의 대표 한도 사용률
@@ -296,10 +292,8 @@ mod tests {
         assert_eq!(rock_colors(0), (DAY_TOP, DAY_BOTTOM));
         assert_eq!(rock_colors(40), (DAY_TOP, DAY_BOTTOM));
         let glow = glow_color(50);
-        assert_eq!(
-            rock_colors(50),
-            (scale(glow, TOP_LIGHT), scale(glow, BOTTOM_SHADE))
-        );
+        assert_eq!(rock_colors(50), (scale(glow, TOP_LIGHT), DAY_BOTTOM));
+        assert_eq!(rock_colors(100).1, DAY_BOTTOM);
         let (top, _) = rock_colors(45);
         assert_eq!(top, mix_color(DAY_TOP, scale(glow, TOP_LIGHT), 0.5));
     }
@@ -336,5 +330,18 @@ mod tests {
             .unwrap();
         let i = (top * width + x) * 4;
         assert_eq!(&icon.rgba()[i..i + 3], &rock_colors(100).0);
+    }
+
+    /// 설명 영상용: 0~100% 아이콘을 RGBA 원본 그대로 FITZROY_FRAMES_DIR에 저장한다.
+    #[test]
+    #[ignore]
+    fn export_icon_frames() {
+        let dir = std::path::PathBuf::from(std::env::var("FITZROY_FRAMES_DIR").unwrap());
+        std::fs::create_dir_all(&dir).unwrap();
+        for level in 0..=100 {
+            let icon = painted_icon(level);
+            assert_eq!((icon.width(), icon.height()), (96, 44));
+            std::fs::write(dir.join(format!("{level:03}.rgba")), icon.rgba()).unwrap();
+        }
     }
 }
