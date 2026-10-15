@@ -4,7 +4,7 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { formatDay, formatPastTime, formatResetTime, formatTokens, totalTokens } from "./format";
-import type { DailyTokens, ProviderReport } from "./types";
+import type { DailyTokens, LimitWindow, ProviderReport } from "./types";
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -17,14 +17,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function limitRow(
-  label: string,
-  percent: number | null,
-  resetsAt: number | null,
-  lastResetAt: number | null,
-): HTMLElement | null {
-  if (percent === null) return null;
-
+function limitRow({ label, percent, resetsAt, lastResetAt }: LimitWindow): HTMLElement {
   const row = el("div", "limit");
   const head = el("div", "limit-head");
   head.append(el("span", "limit-label", label));
@@ -90,27 +83,22 @@ function weekChart(days: DailyTokens[]): HTMLElement {
 
 function card(report: ProviderReport): HTMLElement {
   const node = el("section", "card");
-  const title = el("button", "card-title", report.name);
-  title.title = `${report.name} 사용량 화면 열기`;
-  title.addEventListener("click", () => {
-    void invoke("open_usage_page", { id: report.id }).catch(() => {});
-  });
-  node.append(title);
+  if (report.hasUsagePage) {
+    const title = el("button", "card-title", report.name);
+    title.title = `${report.name} 사용량 화면 열기`;
+    title.addEventListener("click", () => {
+      void invoke("open_usage_page", { id: report.id }).catch(() => {});
+    });
+    node.append(title);
+  } else {
+    node.append(el("div", "card-title card-title-static", report.name));
+  }
 
-  const session = limitRow(
-    "현재 세션",
-    report.sessionPercent,
-    report.sessionResetsAt,
-    report.sessionLastResetAt,
-  );
-  const weekly = limitRow(
-    "이번 주",
-    report.weeklyPercent,
-    report.weeklyResetsAt,
-    report.weeklyLastResetAt,
-  );
-  if (session) node.append(session);
-  if (weekly) node.append(weekly);
+  node.append(...report.limits.map(limitRow));
+  if (report.limitsAsOf !== null && report.limits.length > 0) {
+    // 로그에서 읽은 값은 마지막으로 사용한 때 이후로 바뀌지 않는다.
+    node.append(el("div", "muted", `${formatPastTime(report.limitsAsOf)} 사용 기준`));
+  }
 
   if (report.tokensToday) {
     const t = report.tokensToday;
@@ -155,8 +143,14 @@ function card(report: ProviderReport): HTMLElement {
   return node;
 }
 
+// 메뉴에서 고른 서비스의 카드만 보여준다.
+let page = "claude";
+let lastReports: ProviderReport[] = [];
+
 function render(reports: ProviderReport[]) {
-  document.querySelector<HTMLElement>("#cards")?.replaceChildren(...reports.map(card));
+  lastReports = reports;
+  const shown = reports.filter((report) => report.id === page);
+  document.querySelector<HTMLElement>("#cards")?.replaceChildren(...shown.map(card));
 }
 
 const PANEL_WIDTH = 300;
@@ -191,7 +185,9 @@ async function setUpAbout() {
   about.querySelector("#about-repository")?.addEventListener("click", () => {
     void invoke("open_repository").catch(() => {});
   });
+
   await listen("show-about", () => show(true));
+  await listen("show-page", () => show(false));
 }
 
 // 머리글의 메뉴 버튼을 누르면 버튼 바로 아래에 앱 메뉴(종료 등)를 띄운다.
@@ -212,6 +208,11 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   // 값은 뒤에서 주기적으로 갱신되어 이벤트로 온다. 그 전까지는 마지막으로 받아 둔 값을 보여준다.
   await listen<ProviderReport[]>("usage-updated", (event) => render(event.payload));
+  await listen<string>("show-page", (event) => {
+    page = event.payload;
+    render(lastReports);
+  });
+  page = await invoke<string>("get_page");
   render(await invoke<ProviderReport[]>("get_usage"));
   await setUpAbout();
 });

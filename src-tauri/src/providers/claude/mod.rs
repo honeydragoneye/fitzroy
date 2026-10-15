@@ -6,11 +6,12 @@ use std::sync::Mutex;
 
 use chrono::{Datelike, Days, Local, NaiveDate, TimeZone};
 
-use super::{now_ms, Provider, Usage};
-use limits::{Limits, LimitsError, LimitsState};
+use super::{now_ms, LimitWindow, Provider, Usage};
+use limits::{Limits, LimitsError, LimitsState, PassedResets};
 use logs::LogReader;
 
 pub const ID: &str = "claude";
+pub const NAME: &str = "Claude";
 
 /// 설정 > 사용량 화면. 설치된 Claude 앱으로 먼저 열고, 앱이 없으면 웹으로 연다.
 pub const USAGE_PAGE_URLS: &[&str] = &[
@@ -47,7 +48,7 @@ impl ClaudeProvider {
         &self,
         config_dir: &ConfigDir,
         now_ms: i64,
-    ) -> (Option<Limits>, (Option<i64>, Option<i64>), Option<LimitsError>) {
+    ) -> (Option<Limits>, PassedResets, Option<LimitsError>) {
         let mut state = self.limits.lock().unwrap();
 
         if state.should_attempt(now_ms) {
@@ -114,7 +115,7 @@ impl Provider for ClaudeProvider {
     }
 
     fn name(&self) -> &'static str {
-        "Claude"
+        NAME
     }
 
     fn fetch(&self) -> Usage {
@@ -139,13 +140,22 @@ impl Provider for ClaudeProvider {
         }
 
         let (limits, (session_reset_at, weekly_reset_at), error) = self.limits(&config_dir, now);
-        usage.session_last_reset_at = session_reset_at;
-        usage.weekly_last_reset_at = weekly_reset_at;
         if let Some(limits) = limits {
-            usage.session_percent = limits.session_percent;
-            usage.session_resets_at = limits.session_resets_at;
-            usage.weekly_percent = limits.weekly_percent;
-            usage.weekly_resets_at = limits.weekly_resets_at;
+            let windows = [
+                ("현재 세션", limits.session_percent, limits.session_resets_at, session_reset_at),
+                ("이번 주", limits.weekly_percent, limits.weekly_resets_at, weekly_reset_at),
+            ];
+            usage.limits = windows
+                .into_iter()
+                .filter_map(|(label, percent, resets_at, last_reset_at)| {
+                    Some(LimitWindow {
+                        label: label.to_string(),
+                        percent: percent?,
+                        resets_at,
+                        last_reset_at,
+                    })
+                })
+                .collect();
         }
         errors.extend(error.map(|error| error.to_string()));
 

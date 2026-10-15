@@ -56,6 +56,12 @@ fn show_app_menu(app: AppHandle, window: WebviewWindow, x: f64, y: f64) -> Resul
         .map_err(|e| e.to_string())
 }
 
+/// 창에 보여줄 서비스 id. 메뉴에서 바꾸면 `show-page` 이벤트로 온다.
+#[tauri::command]
+fn get_page(settings: State<'_, SettingsStore>) -> String {
+    settings.get().page
+}
+
 #[tauri::command]
 fn open_repository(app: AppHandle) -> Result<(), String> {
     app.opener()
@@ -99,6 +105,7 @@ pub fn run() {
         .manage(PanelState::default())
         .manage(MenuBarState::default())
         .invoke_handler(tauri::generate_handler![
+            get_page,
             get_usage,
             open_repository,
             open_usage_page,

@@ -148,7 +148,11 @@ body {
   cursor: pointer;
 }
 
-.card-title::after {
+.card-title-static {
+  cursor: default;
+}
+
+.card-title:not(.card-title-static)::after {
   content: " ↗";
   font-weight: 400;
   color: var(--muted);

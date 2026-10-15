@@ -89,11 +89,10 @@ fn rock_colors(level: u8) -> ([u8; 3], [u8; 3]) {
     )
 }
 
-/// 메뉴 막대에 띄울 값: 현재 세션 사용률
-pub fn primary_percent(reports: &[ProviderReport]) -> Option<f64> {
-    reports
-        .iter()
-        .find_map(|report| report.usage.session_percent)
+/// 메뉴 막대에 띄울 값: 창에서 고른 서비스(`page`)의 대표 한도 사용률
+pub fn primary_percent(reports: &[ProviderReport], page: &str) -> Option<f64> {
+    let report = reports.iter().find(|report| report.id == page)?;
+    report.usage.limits.first().map(|limit| limit.percent)
 }
 
 /// 표시를 껐으면 글자를 없애고, 켰는데 값이 없으면 "–" 를 보여준다.
@@ -222,9 +221,9 @@ pub fn update(app: &AppHandle, reports: &[ProviderReport]) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    let percent = primary_percent(reports);
-    let show = app.state::<SettingsStore>().get().show_percent_in_menu_bar;
-    let _ = tray.set_title(title(percent, show));
+    let settings = app.state::<SettingsStore>().get();
+    let percent = primary_percent(reports, &settings.page);
+    let _ = tray.set_title(title(percent, settings.show_percent_in_menu_bar));
 
     let next = icon_level(percent);
     let state = app.state::<MenuBarState>();
@@ -245,6 +244,36 @@ pub fn update(app: &AppHandle, reports: &[ProviderReport]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::{LimitWindow, Usage};
+
+    fn report(id: &'static str, percents: &[f64]) -> ProviderReport {
+        ProviderReport {
+            id,
+            name: id,
+            has_usage_page: false,
+            usage: Usage {
+                limits: percents
+                    .iter()
+                    .map(|&percent| LimitWindow {
+                        label: "한도".to_string(),
+                        percent,
+                        resets_at: None,
+                        last_reset_at: None,
+                    })
+                    .collect(),
+                ..Usage::default()
+            },
+        }
+    }
+
+    #[test]
+    fn primary_percent_follows_page() {
+        let reports = [report("claude", &[3.0, 29.0]), report("codex", &[0.0])];
+        assert_eq!(primary_percent(&reports, "claude"), Some(3.0));
+        assert_eq!(primary_percent(&reports, "codex"), Some(0.0));
+        assert_eq!(primary_percent(&reports, "other"), None);
+        assert_eq!(primary_percent(&[report("codex", &[])], "codex"), None);
+    }
 
     #[test]
     fn icon_level_rounds_and_clamps() {

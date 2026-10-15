@@ -51,6 +51,9 @@ impl Limits {
     }
 }
 
+/// 가장 최근에 지난 (세션, 주간) 재설정 시각
+pub type PassedResets = (Option<i64>, Option<i64>);
+
 /// 갱신 요청이 몰려도 한도 API 는 이 간격보다 자주 부르지 않는다.
 const MIN_INTERVAL_MS: i64 = 30_000;
 
@@ -95,7 +98,7 @@ impl LimitsState {
     }
 
     /// 가장 최근에 지난 (세션, 주간) 재설정 시각.
-    pub fn passed_resets(&self, now_ms: i64) -> (Option<i64>, Option<i64>) {
+    pub fn passed_resets(&self, now_ms: i64) -> PassedResets {
         let passed = |at: Option<i64>| at.filter(|&at| at <= now_ms);
         let last = self.last.unwrap_or_default();
         (

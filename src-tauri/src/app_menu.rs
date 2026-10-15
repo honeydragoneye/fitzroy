@@ -5,11 +5,14 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::menu_bar;
+use crate::providers;
 use crate::refresher::Refresher;
 use crate::settings::SettingsStore;
 
 /// "Fitzroy에 관하여"를 고르면 창으로 보내는 이벤트 이름
 pub const SHOW_ABOUT: &str = "show-about";
+/// 보여줄 서비스를 바꾸면 창으로 보내는 이벤트 이름. 값은 서비스 id.
+pub const SHOW_PAGE: &str = "show-page";
 
 const REFRESH_NOW: &str = "refresh-now";
 const SHOW_PERCENT: &str = "show-percent";
@@ -17,6 +20,7 @@ const AUTOSTART: &str = "autostart";
 const ABOUT: &str = "about";
 const QUIT: &str = "quit";
 const INTERVAL_PREFIX: &str = "interval-";
+const PAGE_PREFIX: &str = "page-";
 
 const INTERVALS: &[(u64, &str)] = &[(30, "30초"), (60, "1분"), (120, "2분"), (300, "5분")];
 
@@ -37,7 +41,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         .map(|item| item as &dyn IsMenuItem<Wry>)
         .collect();
 
-    Menu::with_items(
+    let menu = Menu::with_items(
         app,
         &[
             &MenuItem::with_id(app, REFRESH_NOW, "지금 새로 고침", true, None::<&str>)?,
@@ -63,7 +67,25 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &MenuItem::with_id(app, ABOUT, "Fitzroy에 관하여", true, None::<&str>)?,
             &MenuItem::with_id(app, QUIT, "Fitzroy 종료", true, None::<&str>)?,
         ],
-    )
+    )?;
+
+    // 맨 위에 창에 보여줄 서비스를 고르는 항목을 둔다.
+    let page_items = providers::PAGES
+        .iter()
+        .map(|(id, name)| {
+            let checked = settings.page == *id;
+            let id = format!("{PAGE_PREFIX}{id}");
+            CheckMenuItem::with_id(app, id, name, true, checked, None::<&str>)
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let mut page_refs: Vec<&dyn IsMenuItem<Wry>> = page_items
+        .iter()
+        .map(|item| item as &dyn IsMenuItem<Wry>)
+        .collect();
+    page_refs.push(&separator);
+    menu.prepend_items(&page_refs)?;
+    Ok(menu)
 }
 
 pub fn handle(app: &AppHandle, id: &str) {
@@ -86,6 +108,15 @@ pub fn handle(app: &AppHandle, id: &str) {
             let _ = app.emit(SHOW_ABOUT, ());
         }
         QUIT => app.exit(0),
+        _ if id.starts_with(PAGE_PREFIX) => {
+            let page = &id[PAGE_PREFIX.len()..];
+            if providers::PAGES.iter().any(|(known, _)| *known == page) {
+                app.state::<SettingsStore>()
+                    .update(|s| s.page = page.to_string());
+                menu_bar::update(app, &app.state::<Refresher>().reports());
+                let _ = app.emit(SHOW_PAGE, page);
+            }
+        }
         _ => {
             let Some(secs) = id
                 .strip_prefix(INTERVAL_PREFIX)

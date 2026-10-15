@@ -16,17 +16,24 @@ export interface DailyTokens {
   tokens: number;
 }
 
+export interface LimitWindow {
+  // "현재 세션", "이번 주", "30일" 처럼 화면에 그대로 쓰는 이름
+  label: string;
+  percent: number;
+  resetsAt: number | null;
+  // 가장 최근에 지난 재설정 시각. 다음 재설정 시각을 모를 때(사용률 0%) 대신 보여준다.
+  lastResetAt: number | null;
+}
+
 // src-tauri/src/providers/mod.rs 의 ProviderReport 와 같은 형식. 시각은 Unix epoch 밀리초.
 export interface ProviderReport {
   id: string;
   name: string;
-  sessionPercent: number | null;
-  sessionResetsAt: number | null;
-  weeklyPercent: number | null;
-  weeklyResetsAt: number | null;
-  // 가장 최근에 지난 재설정 시각. 다음 재설정 시각을 모를 때(사용률 0%) 대신 보여준다.
-  sessionLastResetAt: number | null;
-  weeklyLastResetAt: number | null;
+  // 이름을 눌러 사용량 화면을 열 수 있는지
+  hasUsagePage: boolean;
+  limits: LimitWindow[];
+  // 한도 값이 언제 기준인지. 로그에서 읽어 사용할 때만 갱신되는 서비스에서 쓴다.
+  limitsAsOf: number | null;
   tokensToday: TokenUsage | null;
   tokensLast5h: TokenUsage | null;
   tokensLast7d: TokenUsage | null;

@@ -15,6 +15,8 @@ pub struct Settings {
     /// 메뉴 막대 아이콘 옆에 사용률 숫자를 표시할지
     pub show_percent_in_menu_bar: bool,
     pub refresh_interval_secs: u64,
+    /// 창에 보여줄 서비스 id
+    pub page: String,
 }
 
 impl Default for Settings {
@@ -22,6 +24,7 @@ impl Default for Settings {
         Settings {
             show_percent_in_menu_bar: true,
             refresh_interval_secs: 60,
+            page: "claude".to_string(),
         }
     }
 }
