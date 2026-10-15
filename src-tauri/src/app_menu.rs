@@ -8,6 +8,7 @@ use crate::menu_bar;
 use crate::providers;
 use crate::refresher::Refresher;
 use crate::settings::SettingsStore;
+use crate::updates::Updates;
 
 /// "Fitzroy에 관하여"를 고르면 창으로 보내는 이벤트 이름
 pub const SHOW_ABOUT: &str = "show-about";
@@ -17,6 +18,8 @@ pub const SHOW_PAGE: &str = "show-page";
 const REFRESH_NOW: &str = "refresh-now";
 const SHOW_PERCENT: &str = "show-percent";
 const AUTOSTART: &str = "autostart";
+const CHECK_UPDATES_NOW: &str = "check-updates-now";
+const AUTO_CHECK_UPDATES: &str = "auto-check-updates";
 const ABOUT: &str = "about";
 const QUIT: &str = "quit";
 const INTERVAL_PREFIX: &str = "interval-";
@@ -63,7 +66,16 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 autostart,
                 None::<&str>,
             )?,
+            &CheckMenuItem::with_id(
+                app,
+                AUTO_CHECK_UPDATES,
+                "업데이트 자동 확인",
+                true,
+                settings.check_for_updates,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app)?,
+            &MenuItem::with_id(app, CHECK_UPDATES_NOW, "업데이트 확인…", true, None::<&str>)?,
             &MenuItem::with_id(app, ABOUT, "Fitzroy에 관하여", true, None::<&str>)?,
             &MenuItem::with_id(app, QUIT, "Fitzroy 종료", true, None::<&str>)?,
         ],
@@ -103,6 +115,20 @@ pub fn handle(app: &AppHandle, id: &str) {
             } else {
                 autostart.enable()
             };
+        }
+        AUTO_CHECK_UPDATES => {
+            let settings = app
+                .state::<SettingsStore>()
+                .update(|s| s.check_for_updates = !s.check_for_updates);
+            // 켰을 때 확인할 때가 지났으면 바로 확인하게 한다.
+            if settings.check_for_updates {
+                app.state::<Updates>().wake();
+            }
+        }
+        CHECK_UPDATES_NOW => {
+            // 결과는 앱 정보 화면에 보여준다.
+            let _ = app.emit(SHOW_ABOUT, ());
+            app.state::<Updates>().check_now();
         }
         ABOUT => {
             let _ = app.emit(SHOW_ABOUT, ());

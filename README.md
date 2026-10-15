@@ -49,6 +49,12 @@ xattr -dr com.apple.quarantine /Applications/Fitzroy.app
 
 Fitzroy runs only in the menu bar and has no Dock icon. To quit it, open the panel, click the menu button in the top right, and choose **Quit Fitzroy**.
 
+## Updates
+
+Once a week, Fitzroy asks GitHub for the latest release version. It sends no account information. When a newer version is out, a notice appears at the top of the panel. Click it to open the release page, download the new `.dmg`, and drag Fitzroy into Applications again to replace the old copy.
+
+To check right away, choose **Check for Updates…** from the menu. To stop the weekly check, turn off **Check for Updates Automatically** in the same menu.
+
 ## Build from source
 
 You need [Rust](https://www.rust-lang.org/tools/install), [Node.js](https://nodejs.org/) 20.19 or later, and the Xcode Command Line Tools (`xcode-select --install`).

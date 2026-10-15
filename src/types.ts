@@ -25,6 +25,19 @@ export interface LimitWindow {
   lastResetAt: number | null;
 }
 
+// src-tauri/src/updates.rs 의 Release
+export interface Release {
+  version: string;
+  url: string;
+}
+
+// 메뉴에서 "업데이트 확인…"을 골랐을 때의 진행 상황
+export type UpdateStatus =
+  | { state: "checking" }
+  | { state: "upToDate" }
+  | { state: "available"; version: string }
+  | { state: "failed" };
+
 // src-tauri/src/providers/mod.rs 의 ProviderReport 와 같은 형식. 시각은 Unix epoch 밀리초.
 export interface ProviderReport {
   id: string;

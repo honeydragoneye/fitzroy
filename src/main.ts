@@ -4,7 +4,7 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { formatDay, formatPastTime, formatResetTime, formatTokens, totalTokens } from "./format";
-import type { DailyTokens, LimitWindow, ProviderReport } from "./types";
+import type { DailyTokens, LimitWindow, ProviderReport, Release, UpdateStatus } from "./types";
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -167,6 +167,19 @@ function fitWindowToContent(container: HTMLElement) {
   }).observe(container);
 }
 
+function updateStatusText(status: UpdateStatus): string {
+  switch (status.state) {
+    case "checking":
+      return "업데이트 확인 중…";
+    case "upToDate":
+      return "최신 버전입니다";
+    case "available":
+      return `새 버전 v${status.version}이 있습니다`;
+    case "failed":
+      return "업데이트를 확인하지 못했습니다";
+  }
+}
+
 // 메뉴에서 "Fitzroy에 관하여"를 고르면 카드 대신 앱 정보를 보여준다.
 async function setUpAbout() {
   const about = document.querySelector<HTMLElement>("#about");
@@ -185,9 +198,34 @@ async function setUpAbout() {
   about.querySelector("#about-repository")?.addEventListener("click", () => {
     void invoke("open_repository").catch(() => {});
   });
-
-  await listen("show-about", () => show(true));
+  // 메뉴에서 "업데이트 확인…"을 고르면 앱 정보 화면에 결과를 보여준다.
+  const update = about.querySelector<HTMLElement>("#about-update");
+  await listen<UpdateStatus>("update-status", ({ payload }) => {
+    if (!update) return;
+    update.hidden = false;
+    update.textContent = updateStatusText(payload);
+  });
+  await listen("show-about", () => {
+    if (update) update.hidden = true;
+    show(true);
+  });
   await listen("show-page", () => show(false));
+}
+
+// 새 버전이 있으면 카드 위에 알림을 띄운다. 누르면 릴리스 페이지가 열린다.
+async function setUpUpdateBanner() {
+  const banner = document.querySelector<HTMLButtonElement>("#update-banner");
+  if (!banner) return;
+
+  const show = (release: Release | null) => {
+    banner.hidden = release === null;
+    banner.textContent = release ? `새 버전 v${release.version}이 있습니다` : "";
+  };
+  banner.addEventListener("click", () => {
+    void invoke("open_release").catch(() => {});
+  });
+  await listen<Release | null>("update-available", (event) => show(event.payload));
+  show(await invoke<Release | null>("get_update"));
 }
 
 // 머리글의 메뉴 버튼을 누르면 버튼 바로 아래에 앱 메뉴(종료 등)를 띄운다.
@@ -215,4 +253,5 @@ window.addEventListener("DOMContentLoaded", async () => {
   page = await invoke<string>("get_page");
   render(await invoke<ProviderReport[]>("get_usage"));
   await setUpAbout();
+  await setUpUpdateBanner();
 });

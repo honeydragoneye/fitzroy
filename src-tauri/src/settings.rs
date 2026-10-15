@@ -17,6 +17,8 @@ pub struct Settings {
     pub refresh_interval_secs: u64,
     /// 창에 보여줄 서비스 id
     pub page: String,
+    /// 일주일에 한 번 GitHub 에서 새 버전을 확인할지
+    pub check_for_updates: bool,
 }
 
 impl Default for Settings {
@@ -25,6 +27,7 @@ impl Default for Settings {
             show_percent_in_menu_bar: true,
             refresh_interval_secs: 60,
             page: "claude".to_string(),
+            check_for_updates: true,
         }
     }
 }

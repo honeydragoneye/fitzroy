@@ -3,6 +3,7 @@ mod menu_bar;
 mod providers;
 mod refresher;
 mod settings;
+mod updates;
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -16,6 +17,7 @@ use menu_bar::MenuBarState;
 use providers::ProviderReport;
 use refresher::Refresher;
 use settings::SettingsStore;
+use updates::{Release, Updates};
 
 const MAIN_WINDOW: &str = "main";
 const REPOSITORY_URL: &str = "https://github.com/imkmss/fitzroy";
@@ -62,6 +64,21 @@ fn get_page(settings: State<'_, SettingsStore>) -> String {
     settings.get().page
 }
 
+/// 지금 버전보다 새 릴리스. 새로 찾으면 `update-available` 이벤트로 온다.
+#[tauri::command]
+fn get_update(updates: State<'_, Updates>) -> Option<Release> {
+    updates.available()
+}
+
+/// 새 릴리스 페이지를 연다. 주소는 앱이 GitHub 에서 받아 확인한 것만 쓴다.
+#[tauri::command]
+fn open_release(app: AppHandle, updates: State<'_, Updates>) -> Result<(), String> {
+    let release = updates.available().ok_or("새 버전이 없습니다")?;
+    app.opener()
+        .open_url(release.url, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn open_repository(app: AppHandle) -> Result<(), String> {
     app.opener()
@@ -106,7 +123,9 @@ pub fn run() {
         .manage(MenuBarState::default())
         .invoke_handler(tauri::generate_handler![
             get_page,
+            get_update,
             get_usage,
+            open_release,
             open_repository,
             open_usage_page,
             show_app_menu
@@ -147,6 +166,7 @@ pub fn run() {
             menu_bar::shrink_title_font(&tray);
 
             let cache_dir = app.path().app_cache_dir().ok();
+            updates::spawn(app.handle(), cache_dir.clone());
             refresher::spawn(app.handle().clone(), providers::all(cache_dir), wake_rx);
 
             Ok(())

@@ -126,6 +126,31 @@ body {
   text-decoration: underline;
 }
 
+.update-banner {
+  margin: 0;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 10px;
+  background-color: var(--card);
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.update-banner::after {
+  content: " ↗";
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.update-banner:hover,
+.update-banner:focus-visible {
+  outline: none;
+  text-decoration: underline;
+}
+
 .card {
   display: flex;
   flex-direction: column;
