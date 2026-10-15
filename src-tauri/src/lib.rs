@@ -147,7 +147,8 @@ pub fn run() {
             let tray = TrayIconBuilder::with_id(menu_bar::TRAY_ID)
                 .icon(menu_bar::template_icon())
                 .icon_as_template(true)
-                .tooltip("Fitzroy")
+                // 개발 모드로 띄운 앱은 이름 뒤에 *를 붙여 설치한 앱과 구별한다.
+                .tooltip(if cfg!(debug_assertions) { "Fitzroy *" } else { "Fitzroy" })
                 .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     let app = tray.app_handle();

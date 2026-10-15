@@ -244,6 +244,12 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (container) fitWindowToContent(container);
   setUpAppMenu();
 
+  // 개발 모드(npm run tauri dev)로 띄운 앱은 제목 뒤에 *를 붙여 설치한 앱과 구별한다. 빌드한 앱에는 붙지 않는다.
+  if (import.meta.env.DEV) {
+    const title = document.querySelector<HTMLElement>(".header-title");
+    if (title) title.textContent += " *";
+  }
+
   // 값은 뒤에서 주기적으로 갱신되어 이벤트로 온다. 그 전까지는 마지막으로 받아 둔 값을 보여준다.
   await listen<ProviderReport[]>("usage-updated", (event) => render(event.payload));
   await listen<string>("show-page", (event) => {
