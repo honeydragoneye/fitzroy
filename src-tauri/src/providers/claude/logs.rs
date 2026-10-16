@@ -13,9 +13,8 @@ use std::time::SystemTime;
 use chrono::DateTime;
 use serde::Deserialize;
 
-use crate::providers::{DailyTokens, ModelUsage, TokenUsage};
-
-pub const HOUR_MS: i64 = 60 * 60 * 1000;
+use crate::providers::tokens::{dedupe, Entry};
+use crate::providers::TokenUsage;
 
 const SYNTHETIC_MODEL: &str = "<synthetic>";
 
@@ -42,14 +41,6 @@ struct RawUsage {
     cache_read_input_tokens: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Entry {
-    /// 중복 제거 키. `message.id` 가 없으면 중복을 가려낼 수 없어 None.
-    key: Option<String>,
-    ts_ms: i64,
-    model: String,
-    tokens: TokenUsage,
-}
 
 fn parse_line(line: &[u8]) -> Option<Entry> {
     // 대부분의 줄은 사용량이 없다. JSON 파싱 전에 걸러 낸다.
@@ -174,101 +165,10 @@ impl LogReader {
     }
 }
 
-/// 같은 키의 줄들은 사용량이 같지만, 복사된 줄에 0 이 들어간 경우가 있어 가장 큰 값을 쓴다.
-/// 시각은 가장 이른 것을 쓴다.
-fn dedupe<'a>(entries: impl Iterator<Item = &'a Entry>) -> Vec<Entry> {
-    let mut by_key: HashMap<&str, Entry> = HashMap::new();
-    let mut result = Vec::new();
-
-    for entry in entries {
-        let Some(key) = entry.key.as_deref() else {
-            result.push(entry.clone());
-            continue;
-        };
-        match by_key.get_mut(key) {
-            Some(kept) => {
-                if entry.tokens.total() > kept.tokens.total() {
-                    kept.tokens = entry.tokens;
-                }
-                kept.ts_ms = kept.ts_ms.min(entry.ts_ms);
-            }
-            None => {
-                by_key.insert(key, entry.clone());
-            }
-        }
-    }
-
-    result.extend(by_key.into_values());
-    result
-}
-
-#[derive(Debug, Default)]
-pub struct Summary {
-    pub today: TokenUsage,
-    pub last_5h: TokenUsage,
-    pub last_7d: TokenUsage,
-    /// 오늘 사용량이 많은 순
-    pub models_today: Vec<ModelUsage>,
-    /// `day_starts` 의 날짜별 토큰 합계
-    pub daily: Vec<DailyTokens>,
-}
-
-/// `day_starts` 는 그래프에 넣을 날짜들의 시작 시각을 오래된 날부터 늘어놓은 것이다.
-pub fn summarize(
-    entries: &[Entry],
-    now_ms: i64,
-    today_start_ms: i64,
-    day_starts: &[i64],
-) -> Summary {
-    let mut summary = Summary {
-        daily: day_starts
-            .iter()
-            .map(|&day_start| DailyTokens {
-                day_start,
-                tokens: 0,
-            })
-            .collect(),
-        ..Summary::default()
-    };
-    let mut models: HashMap<&str, TokenUsage> = HashMap::new();
-
-    for entry in entries {
-        let age = now_ms - entry.ts_ms;
-        if age < 0 {
-            continue;
-        }
-        if entry.ts_ms >= today_start_ms {
-            summary.today.add(&entry.tokens);
-            models.entry(&entry.model).or_default().add(&entry.tokens);
-        }
-        if age < 5 * HOUR_MS {
-            summary.last_5h.add(&entry.tokens);
-        }
-        if age < 7 * 24 * HOUR_MS {
-            summary.last_7d.add(&entry.tokens);
-        }
-        // 그 시각이 속한 날: 시작 시각이 그보다 늦지 않은 마지막 날
-        if let Some(day) = day_starts.iter().rposition(|&start| start <= entry.ts_ms) {
-            summary.daily[day].tokens += entry.tokens.total();
-        }
-    }
-
-    summary.models_today = models
-        .into_iter()
-        .map(|(model, tokens)| ModelUsage {
-            model: model.to_string(),
-            tokens,
-        })
-        .collect();
-    summary
-        .models_today
-        .sort_by(|a, b| b.tokens.total().cmp(&a.tokens.total()).then(a.model.cmp(&b.model)));
-    summary
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::tokens::{summarize, HOUR_MS};
     use std::io::Write;
 
     fn line(id: &str, request: &str, model: &str, ts: &str, tokens: [u64; 4]) -> String {

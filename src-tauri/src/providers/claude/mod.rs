@@ -4,8 +4,7 @@ mod logs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use chrono::{Datelike, Days, Local, NaiveDate, TimeZone};
-
+use super::tokens::{summarize, today_and_week_starts};
 use super::{now_ms, LimitWindow, Provider, Usage};
 use limits::{Limits, LimitsError, LimitsState, PassedResets};
 use logs::LogReader;
@@ -89,32 +88,6 @@ fn config_dir() -> Option<ConfigDir> {
     }
 }
 
-fn local_midnight_ms(date: NaiveDate) -> Option<i64> {
-    let midnight = date.and_hms_opt(0, 0, 0)?;
-    Some(Local.from_local_datetime(&midnight).earliest()?.timestamp_millis())
-}
-
-/// 오늘과, 이번 주(일요일~토요일) 각 날의 시작 시각(로컬 자정).
-fn today_and_week_starts(now_ms: i64) -> (i64, Vec<i64>) {
-    let today = Local::now().date_naive();
-    let days_from_sunday = today.weekday().num_days_from_sunday() as i64;
-    let today_start = local_midnight_ms(today).unwrap_or(now_ms - 24 * logs::HOUR_MS);
-
-    let week = (0..7)
-        .map(|weekday| {
-            let offset = weekday - days_from_sunday;
-            let date = if offset < 0 {
-                today.checked_sub_days(Days::new(offset.unsigned_abs()))
-            } else {
-                today.checked_add_days(Days::new(offset as u64))
-            };
-            date.and_then(local_midnight_ms)
-                .unwrap_or(today_start + offset * 24 * logs::HOUR_MS)
-        })
-        .collect();
-    (today_start, week)
-}
-
 impl Provider for ClaudeProvider {
     fn id(&self) -> &'static str {
         ID
@@ -135,7 +108,7 @@ impl Provider for ClaudeProvider {
         match self.logs.read(&config_dir.path.join("projects")) {
             Ok(entries) => {
                 let (today_start, week_starts) = today_and_week_starts(now);
-                let summary = logs::summarize(&entries, now, today_start, &week_starts);
+                let summary = summarize(&entries, now, today_start, &week_starts);
                 usage.tokens_today = Some(summary.today);
                 usage.tokens_last_5h = Some(summary.last_5h);
                 usage.tokens_last_7d = Some(summary.last_7d);
@@ -147,6 +120,7 @@ impl Provider for ClaudeProvider {
 
         let (limits, (session_reset_at, weekly_reset_at), error) = self.limits(&config_dir, now);
         usage.plan = self.plan.lock().unwrap().clone();
+        usage.tokens_source = Some("Claude Code".to_string());
         if let Some(limits) = limits {
             let windows = [
                 ("현재 세션", limits.session_percent, limits.session_resets_at, session_reset_at),

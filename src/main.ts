@@ -22,10 +22,10 @@ function limitRow({ label, percent, resetsAt, lastResetAt }: LimitWindow): HTMLE
   const head = el("div", "limit-head");
   head.append(el("span", "limit-label", label));
   if (resetsAt !== null) {
-    head.append(el("span", "muted", `${formatResetTime(resetsAt)}에 재설정`));
+    head.append(el("span", "muted", `${formatResetTime(resetsAt)} 재설정`));
   } else if (lastResetAt !== null) {
     // 재설정 뒤 아직 쓰지 않았으면 다음 재설정 시각이 없어서, 지난 재설정 시각을 보여준다.
-    head.append(el("span", "muted", `${formatPastTime(lastResetAt)}에 재설정됨`));
+    head.append(el("span", "muted", `${formatPastTime(lastResetAt)} 재설정됨`));
   }
 
   const bar = el("div", "bar");
@@ -104,7 +104,7 @@ function card(report: ProviderReport): HTMLElement {
   if (report.tokensToday) {
     const t = report.tokensToday;
     node.append(
-      el("div", "tokens", `Claude Code 오늘 ${formatTokens(totalTokens(t))} 토큰`),
+      el("div", "tokens", `${report.tokensSource ? `${report.tokensSource} ` : ""}오늘 ${formatTokens(totalTokens(t))} 토큰`),
       el("div", "muted", `입력 ${formatTokens(t.input)} · 출력 ${formatTokens(t.output)}`),
       el(
         "div",

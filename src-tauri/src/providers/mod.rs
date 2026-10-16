@@ -1,13 +1,13 @@
 mod claude;
-// Codex 는 0.1.0 에서 뺐다. 코드는 남겨 두고 `all` 과 `PAGES` 에 넣으면 다시 켜진다.
-#[allow(dead_code)]
 mod codex;
+mod tokens;
 
 use std::path::PathBuf;
 
 use serde::Serialize;
 
 pub use claude::ClaudeProvider;
+pub use codex::CodexProvider;
 
 #[derive(Debug, Clone, Copy, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,6 +64,8 @@ pub struct LimitWindow {
 pub struct Usage {
     /// 구독 플랜 이름("Pro" 등). 이름 옆에 보여 준다. 알 수 없으면 None.
     pub plan: Option<String>,
+    /// 토큰 수를 어디서 읽었는지("Claude Code", "Codex"). 토큰 합계 줄에 붙여 보여 준다.
+    pub tokens_source: Option<String>,
     /// 한도별 사용률. 앞의 것이 메뉴 막대에 쓰는 대표 값이다.
     pub limits: Vec<LimitWindow>,
     /// 한도 값이 언제 기준인지. 로그에서 읽어 사용할 때만 갱신되는 서비스에서 쓴다.
@@ -106,11 +108,14 @@ pub struct ProviderReport {
 
 /// `cache_dir` 는 Provider 가 앱을 다시 켜도 이어 갈 상태를 저장하는 폴더다.
 pub fn all(cache_dir: Option<PathBuf>) -> Vec<Box<dyn Provider>> {
-    vec![Box::new(ClaudeProvider::new(cache_dir))]
+    vec![
+        Box::new(ClaudeProvider::new(cache_dir)),
+        Box::new(CodexProvider::default()),
+    ]
 }
 
 /// 창에서 고를 수 있는 서비스 (id, 이름). `all` 과 같은 순서다.
-pub const PAGES: &[(&str, &str)] = &[(claude::ID, claude::NAME)];
+pub const PAGES: &[(&str, &str)] = &[(claude::ID, claude::NAME), (codex::ID, codex::NAME)];
 
 /// `id` 서비스의 사용량 화면 주소들. 앞의 것부터 열어 보고, 열 수 없으면 다음 것을 쓴다.
 /// 모르는 서비스면 비어 있다.
@@ -133,6 +138,15 @@ pub fn fetch_all(providers: &[Box<dyn Provider>]) -> Vec<ProviderReport> {
         .collect()
 }
 
+/// 로그인 정보나 로그에 적힌 플랜 값("pro", "go" 등)을 화면에 쓸 이름("Pro", "Go")으로 바꾼다.
+/// 알파벳과 숫자만 남기고 첫 글자를 대문자로 하며, 비어 있으면 None.
+pub(crate) fn plan_name(raw: &str) -> Option<String> {
+    let clean: String = raw.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect();
+    let mut chars = clean.chars();
+    let first = chars.next()?;
+    Some(first.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase())
+}
+
 pub(crate) fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -143,6 +157,15 @@ pub(crate) fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plan_name_is_cleaned_and_capitalized() {
+        assert_eq!(plan_name("pro").as_deref(), Some("Pro"));
+        assert_eq!(plan_name("GO").as_deref(), Some("Go"));
+        assert_eq!(plan_name("max_5x").as_deref(), Some("Max5x"));
+        assert_eq!(plan_name(""), None);
+        assert_eq!(plan_name("  "), None);
+    }
 
     #[test]
     fn report_serializes_flat_camel_case_with_nulls() {
@@ -178,6 +201,7 @@ mod tests {
         assert!(json["limits"][0]["lastResetAt"].is_null());
         assert!(json["limitsAsOf"].is_null());
         assert!(json["plan"].is_null());
+        assert!(json["tokensSource"].is_null());
         assert_eq!(json["tokensToday"]["cacheRead"], 5);
         assert_eq!(json["dailyTokensThisWeek"][0]["dayStart"], 1_700_000_000_000i64);
         assert_eq!(json["dailyTokensThisWeek"][0]["tokens"], 7);

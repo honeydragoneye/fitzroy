@@ -1,31 +1,24 @@
 import type { TokenUsage } from "./types";
 
-const timeFormat = new Intl.DateTimeFormat("ko-KR", {
-  hour: "numeric",
-  minute: "2-digit",
-});
-const weekdayFormat = new Intl.DateTimeFormat("ko-KR", { weekday: "long" });
+const weekdayFormat = new Intl.DateTimeFormat("ko-KR", { weekday: "short" });
 
-// 오늘이면 "오후 7:30", 다른 날이면 "월요일 오전 1:00"
-export function formatResetTime(ms: number, now = new Date()): string {
+const pad = (n: number) => String(n).padStart(2, "0");
+
+// 모든 시각을 같은 양식으로 보여준다: "11·13(금) 22:56"
+function formatDateTime(ms: number): string {
   const date = new Date(ms);
-  const time = timeFormat.format(date);
-  if (date.toDateString() === now.toDateString()) {
-    return time;
-  }
-  return `${weekdayFormat.format(date)} ${time}`;
+  const day = `${pad(date.getMonth() + 1)}·${pad(date.getDate())}(${weekdayFormat.format(date)})`;
+  return `${day} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-const monthDayFormat = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric" });
+// 다음 재설정 시각. "11·13(금) 22:56"
+export function formatResetTime(ms: number): string {
+  return formatDateTime(ms);
+}
 
-// 지난 시각. 오늘이면 "오늘 오후 2:30", 다른 날이면 "10월 13일 오후 7:30"
-export function formatPastTime(ms: number, now = new Date()): string {
-  const date = new Date(ms);
-  const time = timeFormat.format(date);
-  if (date.toDateString() === now.toDateString()) {
-    return `오늘 ${time}`;
-  }
-  return `${monthDayFormat.format(date)} ${time}`;
+// 지난 시각. "10·14(수) 22:57"
+export function formatPastTime(ms: number): string {
+  return formatDateTime(ms);
 }
 
 const dayFormat = new Intl.DateTimeFormat("ko-KR", {

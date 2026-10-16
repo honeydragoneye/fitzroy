@@ -46,6 +46,8 @@ export interface ProviderReport {
   hasUsagePage: boolean;
   // 구독 플랜 이름("Pro" 등). 이름 옆에 보여 준다.
   plan: string | null;
+  // 토큰 수를 읽은 곳("Claude Code", "Codex"). 토큰 합계 줄에 붙여 보여 준다.
+  tokensSource: string | null;
   limits: LimitWindow[];
   // 한도 값이 언제 기준인지. 로그에서 읽어 사용할 때만 갱신되는 서비스에서 쓴다.
   limitsAsOf: number | null;

@@ -13,7 +13,8 @@ use std::time::SystemTime;
 use chrono::DateTime;
 use serde::Deserialize;
 
-use super::{now_ms, LimitWindow, Provider, Usage};
+use super::tokens::{dedupe, summarize, today_and_week_starts, Entry};
+use super::{now_ms, LimitWindow, Provider, TokenUsage, Usage};
 
 pub const ID: &str = "codex";
 pub const NAME: &str = "Codex";
@@ -32,6 +33,21 @@ struct Payload {
     #[serde(rename = "type")]
     kind: Option<String>,
     rate_limits: Option<RateLimits>,
+    /// `turn_context` 의 모델 이름
+    model: Option<String>,
+    /// `token_usage_record` 의 응답 하나를 가리키는 id. 중복 제거에 쓴다.
+    response_id: Option<String>,
+    usage: Option<RawTokens>,
+}
+
+/// 응답 하나의 토큰 수. `input_tokens` 는 캐시된 부분을 포함하고 `output_tokens` 는 추론 토큰을 포함한다.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct RawTokens {
+    input_tokens: u64,
+    cached_input_tokens: u64,
+    cache_write_input_tokens: u64,
+    output_tokens: u64,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +55,8 @@ struct RateLimits {
     limit_id: Option<String>,
     primary: Option<RawWindow>,
     secondary: Option<RawWindow>,
+    /// 구독 플랜. "go", "plus" 등
+    plan_type: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -62,6 +80,7 @@ struct Window {
 struct Snapshot {
     at: Option<i64>,
     windows: Vec<Window>,
+    plan: Option<String>,
 }
 
 /// 재설정 시각이 기록마다 몇 초씩 달라서 가까운 분으로 맞춘다.
@@ -81,6 +100,7 @@ fn parse_snapshot(line: &str) -> Option<Snapshot> {
     if limits.limit_id.as_deref().is_some_and(|id| id != "codex") {
         return None;
     }
+    let plan = limits.plan_type.as_deref().and_then(super::plan_name);
     let windows: Vec<Window> = [limits.primary, limits.secondary]
         .into_iter()
         .flatten()
@@ -99,7 +119,63 @@ fn parse_snapshot(line: &str) -> Option<Snapshot> {
         .timestamp
         .and_then(|text| DateTime::parse_from_rfc3339(&text).ok())
         .map(|time| time.timestamp_millis());
-    Some(Snapshot { at, windows })
+    Some(Snapshot { at, windows, plan })
+}
+
+/// 화면에서 Claude 와 같이 더해 보이도록 입력에서 캐시 부분을 뺀다.
+fn to_tokens(raw: &RawTokens) -> TokenUsage {
+    TokenUsage {
+        input: raw
+            .input_tokens
+            .saturating_sub(raw.cached_input_tokens)
+            .saturating_sub(raw.cache_write_input_tokens),
+        output: raw.output_tokens,
+        cache_write: raw.cache_write_input_tokens,
+        cache_read: raw.cached_input_tokens,
+    }
+}
+
+const UNKNOWN_MODEL: &str = "알 수 없음";
+
+/// 로그에서 응답별 토큰 사용량을 읽는다. 모델은 앞서 나온 `turn_context` 의 것을 쓴다.
+/// 같은 `response_id` 는 이어 연 세션에 복사되어 여러 파일에 있을 수 있어 `dedupe` 로 합친다.
+fn parse_entries(text: &str) -> Vec<Entry> {
+    let mut model = UNKNOWN_MODEL.to_string();
+    let mut entries = Vec::new();
+    for line in text.lines() {
+        let is_context = line.contains("\"turn_context\"");
+        let is_record = line.contains("\"token_usage_record\"");
+        if !is_context && !is_record {
+            continue;
+        }
+        let Ok(parsed) = serde_json::from_str::<Line>(line) else {
+            continue;
+        };
+        let Some(payload) = parsed.payload else {
+            continue;
+        };
+        if is_context {
+            if let Some(name) = payload.model.filter(|name| !name.is_empty()) {
+                model = name;
+            }
+            continue;
+        }
+        let (Some(usage), Some(at)) = (
+            payload.usage,
+            parsed
+                .timestamp
+                .and_then(|text| DateTime::parse_from_rfc3339(&text).ok()),
+        ) else {
+            continue;
+        };
+        entries.push(Entry {
+            key: payload.response_id,
+            ts_ms: at.timestamp_millis(),
+            model: model.clone(),
+            tokens: to_tokens(&usage),
+        });
+    }
+    entries
 }
 
 fn last_snapshot(text: &str) -> Option<Snapshot> {
@@ -178,6 +254,16 @@ struct Cached {
     modified: Option<SystemTime>,
     len: u64,
     snapshot: Option<Snapshot>,
+    entries: Vec<Entry>,
+}
+
+/// 토큰 사용량을 모을 때 이만큼 지난 파일은 보지 않는다. 7일 합계와 이번 주 막대에 충분하다.
+const ENTRY_LOOKBACK_MS: i64 = 8 * 24 * 60 * 60 * 1000;
+
+/// 로그를 읽은 결과
+struct Scan {
+    snapshot: Option<Snapshot>,
+    entries: Vec<Entry>,
 }
 
 #[derive(Default)]
@@ -187,35 +273,59 @@ pub struct CodexProvider {
 }
 
 impl CodexProvider {
-    /// 최근에 바뀐 파일부터 보며 가장 최근의 한도 값을 찾는다.
-    fn latest_snapshot(&self, sessions: &Path) -> io::Result<Option<Snapshot>> {
+    /// 최근에 바뀐 파일부터 보며 가장 최근의 한도 값을 찾고,
+    /// 최근 8일 안에 바뀐 파일에서 토큰 사용량을 모은다.
+    fn read(&self, sessions: &Path, now_ms: i64) -> io::Result<Scan> {
         let mut files = Vec::new();
         collect_rollouts(sessions, &mut files)?;
         files.sort_by_key(|file| std::cmp::Reverse(file.modified));
 
+        let cutoff = now_ms - ENTRY_LOOKBACK_MS;
+        let recent = |file: &SessionFile| {
+            file.modified
+                .and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .is_some_and(|age| age.as_millis() as i64 >= cutoff)
+        };
+
         let mut cache = self.cache.lock().unwrap();
-        for file in files.into_iter().take(MAX_FILES_TO_SCAN) {
+        let present: std::collections::HashSet<&PathBuf> = files.iter().map(|f| &f.path).collect();
+        cache.retain(|path, _| present.contains(path));
+
+        let mut snapshot = None;
+        let mut entries = Vec::new();
+        for (index, file) in files.iter().enumerate() {
+            let wants_snapshot = snapshot.is_none() && index < MAX_FILES_TO_SCAN;
+            let wants_entries = recent(file);
+            if !wants_snapshot && !wants_entries {
+                continue;
+            }
             let fresh = cache
                 .get(&file.path)
                 .is_some_and(|c| c.modified == file.modified && c.len == file.len);
             if !fresh {
-                let snapshot = fs::read_to_string(&file.path)
-                    .ok()
-                    .and_then(|text| last_snapshot(&text));
+                let text = fs::read_to_string(&file.path).unwrap_or_default();
                 cache.insert(
                     file.path.clone(),
                     Cached {
                         modified: file.modified,
                         len: file.len,
-                        snapshot,
+                        snapshot: last_snapshot(&text),
+                        entries: parse_entries(&text),
                     },
                 );
             }
-            if let Some(snapshot) = cache.get(&file.path).and_then(|c| c.snapshot.clone()) {
-                return Ok(Some(snapshot));
+            let cached = &cache[&file.path];
+            if wants_snapshot {
+                snapshot = cached.snapshot.clone();
+            }
+            if wants_entries {
+                entries.extend(cached.entries.iter().cloned());
             }
         }
-        Ok(None)
+        Ok(Scan {
+            snapshot,
+            entries: dedupe(entries.iter()),
+        })
     }
 }
 
@@ -232,13 +342,9 @@ impl Provider for CodexProvider {
         let Some(home) = codex_home() else {
             return Usage::error("홈 폴더를 찾지 못했습니다");
         };
-        let snapshot = match self.latest_snapshot(&home.join("sessions")) {
-            Ok(Some(snapshot)) => snapshot,
-            Ok(None) => {
-                return Usage::error(
-                    "아직 한도 정보가 없습니다. Codex 를 한 번 사용하면 표시됩니다",
-                )
-            }
+        let now = now_ms();
+        let Scan { snapshot, entries } = match self.read(&home.join("sessions"), now) {
+            Ok(scan) => scan,
             Err(_) => {
                 return Usage::error(
                     "Codex 로그를 찾지 못했습니다. Codex CLI 에 로그인해 사용하면 표시됩니다",
@@ -246,16 +352,38 @@ impl Provider for CodexProvider {
             }
         };
 
-        let now = now_ms();
-        Usage {
-            limits: snapshot
-                .windows
-                .into_iter()
-                .map(|window| limit_window(window, now))
-                .collect(),
-            limits_as_of: snapshot.at,
+        let mut usage = Usage {
+            tokens_source: Some("Codex".to_string()),
             ..Usage::default()
+        };
+        match snapshot {
+            Some(snapshot) => {
+                usage.plan = snapshot.plan;
+                usage.limits = snapshot
+                    .windows
+                    .into_iter()
+                    .map(|window| limit_window(window, now))
+                    .collect();
+                usage.limits_as_of = snapshot.at;
+            }
+            None => {
+                usage.error = Some(
+                    "아직 한도 정보가 없습니다. Codex 를 한 번 사용하면 표시됩니다".to_string(),
+                );
+            }
         }
+        if usage.limits.is_empty() && entries.is_empty() {
+            return Usage::error("아직 사용 기록이 없습니다. Codex 를 한 번 사용하면 표시됩니다");
+        }
+
+        let (today_start, week_starts) = today_and_week_starts(now);
+        let summary = summarize(&entries, now, today_start, &week_starts);
+        usage.tokens_today = Some(summary.today);
+        usage.tokens_last_5h = Some(summary.last_5h);
+        usage.tokens_last_7d = Some(summary.last_7d);
+        usage.models_today = Some(summary.models_today);
+        usage.daily_tokens_this_week = Some(summary.daily);
+        usage
     }
 }
 
@@ -285,6 +413,7 @@ mod tests {
 
         let snapshot = last_snapshot(&text).unwrap();
         assert_eq!(snapshot.at, Some(1_791_986_227_322));
+        assert_eq!(snapshot.plan.as_deref(), Some("Go"));
         assert_eq!(
             snapshot.windows,
             vec![Window {
@@ -308,6 +437,62 @@ mod tests {
             None
         );
         assert_eq!(last_snapshot("not json\n{}"), None);
+    }
+
+    fn context(model: &str) -> String {
+        format!(r#"{{"timestamp":"2026-10-14T13:56:30.000Z","type":"turn_context","payload":{{"model":"{model}"}}}}"#)
+    }
+
+    fn record(timestamp: &str, id: &str, input: u64, cached: u64, output: u64) -> String {
+        format!(
+            r#"{{"timestamp":"{timestamp}","type":"token_usage_record","payload":{{"response_id":"{id}","usage":{{"input_tokens":{input},"cached_input_tokens":{cached},"cache_write_input_tokens":0,"output_tokens":{output},"reasoning_output_tokens":3,"total_tokens":{}}}}}}}"#,
+            input + output
+        )
+    }
+
+    #[test]
+    fn reads_tokens_per_response_with_model() {
+        let text = [
+            context("gpt-a"),
+            record("2026-10-14T13:57:00.000Z", "r1", 13_828, 11_008, 15),
+            context("gpt-b"),
+            record("2026-10-14T13:58:00.000Z", "r2", 100, 0, 20),
+            "not json token_usage_record".to_string(),
+        ]
+        .join("\n");
+
+        let entries = parse_entries(&text);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].model, "gpt-a");
+        assert_eq!(entries[0].key.as_deref(), Some("r1"));
+        // 입력에서 캐시된 부분을 빼서 Claude 와 같이 더해 보이게 한다.
+        let t = entries[0].tokens;
+        assert_eq!((t.input, t.output, t.cache_read, t.cache_write), (2_820, 15, 11_008, 0));
+        assert_eq!(t.total(), 13_843);
+        assert_eq!(entries[1].model, "gpt-b");
+        assert_eq!(entries[1].tokens.total(), 120);
+    }
+
+    #[test]
+    fn copied_responses_in_other_files_count_once() {
+        let dir = std::env::temp_dir().join(format!("fitzroy-codex-dup-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let day = dir.join("2026/10/14");
+        fs::create_dir_all(&day).unwrap();
+        let line = record("2026-10-14T13:57:00.000Z", "r1", 100, 0, 20);
+        fs::write(day.join("rollout-a.jsonl"), format!("{line}\n")).unwrap();
+        fs::write(
+            day.join("rollout-b.jsonl"),
+            format!("{line}\n{}\n", record("2026-10-14T13:58:00.000Z", "r2", 10, 0, 5)),
+        )
+        .unwrap();
+
+        let scan = CodexProvider::default().read(&dir, 1_791_986_300_000).unwrap();
+        let total: u64 = scan.entries.iter().map(|e| e.tokens.total()).sum();
+        assert_eq!(scan.entries.len(), 2);
+        assert_eq!(total, 120 + 15);
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
@@ -347,8 +532,9 @@ mod tests {
         fs::create_dir_all(&day).unwrap();
 
         let provider = CodexProvider::default();
-        assert_eq!(provider.latest_snapshot(&dir).unwrap(), None);
-        assert!(provider.latest_snapshot(&dir.join("missing")).is_err());
+        let now = 1_791_986_300_000;
+        assert_eq!(provider.read(&dir, now).unwrap().snapshot, None);
+        assert!(provider.read(&dir.join("missing"), now).is_err());
 
         fs::write(
             day.join("rollout-a.jsonl"),
@@ -358,7 +544,7 @@ mod tests {
         // 가장 최근 파일에 한도 값이 없으면 그 전 파일의 값을 쓴다.
         std::thread::sleep(std::time::Duration::from_millis(20));
         fs::write(day.join("rollout-b.jsonl"), "{}\n").unwrap();
-        let snapshot = provider.latest_snapshot(&dir).unwrap().unwrap();
+        let snapshot = provider.read(&dir, now).unwrap().snapshot.unwrap();
         assert_eq!(snapshot.windows[0].percent, 12.0);
         assert_eq!(provider.cache.lock().unwrap().len(), 2);
 

@@ -192,17 +192,13 @@ struct PlanOAuth {
     subscription_type: Option<String>,
 }
 
-/// 로그인 정보의 `subscriptionType`("pro", "max" 등)을 화면에 쓸 이름("Pro", "Max")으로 바꾼다.
-/// 알파벳과 숫자만 남기고 첫 글자를 대문자로 하며, 비어 있으면 None.
+/// 로그인 정보의 `subscriptionType`("pro", "max" 등)을 화면에 쓸 이름으로 바꾼다.
 fn parse_plan(json: &str) -> Option<String> {
     let raw = serde_json::from_str::<PlanFile>(json)
         .ok()?
         .claude_ai_oauth?
         .subscription_type?;
-    let clean: String = raw.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect();
-    let mut chars = clean.chars();
-    let first = chars.next()?;
-    Some(first.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase())
+    crate::providers::plan_name(&raw)
 }
 
 const KEYCHAIN_SERVICE: &str = "Claude Code-credentials";
