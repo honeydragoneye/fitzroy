@@ -19,6 +19,9 @@ use super::{now_ms, LimitWindow, Provider, TokenUsage, Usage};
 pub const ID: &str = "codex";
 pub const NAME: &str = "Codex";
 
+/// ChatGPT 설정 > 사용량 화면. Codex 앱으로 바로 여는 주소는 없어서 웹으로 연다.
+pub const USAGE_PAGE_URLS: &[&str] = &["https://chatgpt.com/settings/usage?tab=overview"];
+
 /// 최근 파일에 한도 값이 없을 때(대화를 막 시작했을 때 등) 이만큼 더 이전 파일까지 본다.
 const MAX_FILES_TO_SCAN: usize = 5;
 

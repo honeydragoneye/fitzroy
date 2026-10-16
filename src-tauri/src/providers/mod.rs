@@ -122,6 +122,7 @@ pub const PAGES: &[(&str, &str)] = &[(claude::ID, claude::NAME), (codex::ID, cod
 pub fn usage_page_urls(id: &str) -> &'static [&'static str] {
     match id {
         claude::ID => claude::USAGE_PAGE_URLS,
+        codex::ID => codex::USAGE_PAGE_URLS,
         _ => &[],
     }
 }
@@ -157,6 +158,16 @@ pub(crate) fn now_ms() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_service_with_a_usage_page_has_https_or_app_urls() {
+        assert!(usage_page_urls("claude").len() >= 1);
+        assert_eq!(
+            usage_page_urls("codex"),
+            ["https://chatgpt.com/settings/usage?tab=overview"]
+        );
+        assert!(usage_page_urls("unknown").is_empty());
+    }
 
     #[test]
     fn plan_name_is_cleaned_and_capitalized() {
