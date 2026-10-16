@@ -10,6 +10,11 @@ Click the icon to open a panel. The number in the menu bar is your current sessi
 - Token usage today, over the last 5 hours, and over the last 7 days
 - Daily token usage for this week
 
+The two kinds of numbers come from different places:
+
+- **Limit usage (%)** is your whole Claude account: chats in Claude on the web, desktop, and mobile, Claude Code, and any other Claude use that counts toward your plan's limits, on every device. It shows how much of each limit you have used.
+- **Token counts** cover Claude Code on this Mac only, wherever you run it: the terminal, your IDE, or the Claude desktop app. They don't include chats or Claude Code sessions on other devices or in the cloud.
+
 Support for Codex and Gemini is planned for a future version.
 
 > [!NOTE]
