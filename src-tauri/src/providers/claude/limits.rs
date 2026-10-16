@@ -180,6 +180,31 @@ fn parse_credentials(json: &str, now_ms: i64) -> Result<AccessToken, LimitsError
     Ok(AccessToken(oauth.access_token))
 }
 
+#[derive(Deserialize)]
+struct PlanFile {
+    #[serde(rename = "claudeAiOauth")]
+    claude_ai_oauth: Option<PlanOAuth>,
+}
+
+#[derive(Deserialize)]
+struct PlanOAuth {
+    #[serde(rename = "subscriptionType")]
+    subscription_type: Option<String>,
+}
+
+/// 로그인 정보의 `subscriptionType`("pro", "max" 등)을 화면에 쓸 이름("Pro", "Max")으로 바꾼다.
+/// 알파벳과 숫자만 남기고 첫 글자를 대문자로 하며, 비어 있으면 None.
+fn parse_plan(json: &str) -> Option<String> {
+    let raw = serde_json::from_str::<PlanFile>(json)
+        .ok()?
+        .claude_ai_oauth?
+        .subscription_type?;
+    let clean: String = raw.chars().filter(|c| c.is_ascii_alphanumeric()).take(20).collect();
+    let mut chars = clean.chars();
+    let first = chars.next()?;
+    Some(first.to_ascii_uppercase().to_string() + &chars.as_str().to_ascii_lowercase())
+}
+
 const KEYCHAIN_SERVICE: &str = "Claude Code-credentials";
 
 /// macOS Keychain 에 저장된 자격 증명 JSON. 파일과 같은 형식이다.
@@ -240,6 +265,21 @@ pub fn read_access_token(
         let json = read_keychain().ok_or(LimitsError::NotLoggedIn)?;
         parse_credentials(&json, now_ms)
     })
+}
+
+/// 로그인 정보에서 구독 플랜 이름을 읽는다. 토큰은 읽지 않는다.
+/// 만료 여부와 상관없이 파일을 먼저 보고, 없으면 Keychain 을 본다.
+pub fn read_plan(config_dir: &Path, use_keychain: bool) -> Option<String> {
+    fs::read_to_string(config_dir.join(".credentials.json"))
+        .ok()
+        .and_then(|json| parse_plan(&json))
+        .or_else(|| {
+            if use_keychain {
+                read_keychain().and_then(|json| parse_plan(&json))
+            } else {
+                None
+            }
+        })
 }
 
 #[derive(Deserialize)]
@@ -318,6 +358,16 @@ pub fn fetch(token: &AccessToken) -> Result<Limits, LimitsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_plan_name() {
+        let json = |plan: &str| format!(r#"{{"claudeAiOauth":{{"accessToken":"t","subscriptionType":"{plan}"}}}}"#);
+        assert_eq!(parse_plan(&json("pro")).as_deref(), Some("Pro"));
+        assert_eq!(parse_plan(&json("max")).as_deref(), Some("Max"));
+        assert_eq!(parse_plan(&json("")), None);
+        assert_eq!(parse_plan(r#"{"claudeAiOauth":{"accessToken":"t"}}"#), None);
+        assert_eq!(parse_plan("not json"), None);
+    }
 
     #[test]
     fn parses_usage_response() {

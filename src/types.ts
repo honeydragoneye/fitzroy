@@ -44,6 +44,8 @@ export interface ProviderReport {
   name: string;
   // 이름을 눌러 사용량 화면을 열 수 있는지
   hasUsagePage: boolean;
+  // 구독 플랜 이름("Pro" 등). 이름 옆에 보여 준다.
+  plan: string | null;
   limits: LimitWindow[];
   // 한도 값이 언제 기준인지. 로그에서 읽어 사용할 때만 갱신되는 서비스에서 쓴다.
   limitsAsOf: number | null;

@@ -83,15 +83,16 @@ function weekChart(days: DailyTokens[]): HTMLElement {
 
 function card(report: ProviderReport): HTMLElement {
   const node = el("section", "card");
+  const titleText = report.plan ? `${report.name} ${report.plan}` : report.name;
   if (report.hasUsagePage) {
-    const title = el("button", "card-title", report.name);
+    const title = el("button", "card-title", titleText);
     title.title = `${report.name} 사용량 화면 열기`;
     title.addEventListener("click", () => {
       void invoke("open_usage_page", { id: report.id }).catch(() => {});
     });
     node.append(title);
   } else {
-    node.append(el("div", "card-title card-title-static", report.name));
+    node.append(el("div", "card-title card-title-static", titleText));
   }
 
   node.append(...report.limits.map(limitRow));

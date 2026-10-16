@@ -29,20 +29,20 @@ Support for Codex and Gemini is planned for a future version.
 ## Install
 
 1. Download the latest `.dmg` from [Releases](https://github.com/honeydragoneye/fitzroy/releases).
-2. Open the `.dmg` and drag **Fitzroy** into **Applications**.
-3. Open Fitzroy from Applications.
+2. Open the `.dmg` and drag **Fitzroy** into **Applications**. If an older Fitzroy is already there, choose **Replace**.
+3. Open **Terminal** and run this once. It lets macOS open the app:
 
-The app is not signed with an Apple Developer ID, so macOS blocks it the first time you open it. To allow it:
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Fitzroy.app
+   ```
 
-1. Try to open Fitzroy once, and close the warning.
-2. Open **System Settings → Privacy & Security**.
-3. Scroll down and click **Open Anyway** next to the message about Fitzroy, then confirm.
+4. Open Fitzroy from Applications.
 
-You can also clear the quarantine flag in Terminal. Do this if macOS says Fitzroy "is damaged and can't be opened":
+The app is not signed with an Apple Developer ID, so macOS says it can't check Fitzroy for malicious software and blocks it the first time. Step 3 removes that block. If you would rather not use Terminal:
 
-```sh
-xattr -dr com.apple.quarantine /Applications/Fitzroy.app
-```
+1. Try to open Fitzroy once, and close the warning. Don't choose **Move to Trash**.
+2. Right after that, open **System Settings → Privacy & Security**.
+3. Scroll down and click **Open Anyway** next to the message about Fitzroy, then confirm. The button appears only for about an hour after the warning.
 
 Fitzroy runs only in the menu bar and has no Dock icon. To quit it, open the panel, click the menu button in the top right, and choose **Quit Fitzroy**.
 

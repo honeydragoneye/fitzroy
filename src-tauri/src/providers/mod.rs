@@ -62,6 +62,8 @@ pub struct LimitWindow {
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Usage {
+    /// 구독 플랜 이름("Pro" 등). 이름 옆에 보여 준다. 알 수 없으면 None.
+    pub plan: Option<String>,
     /// 한도별 사용률. 앞의 것이 메뉴 막대에 쓰는 대표 값이다.
     pub limits: Vec<LimitWindow>,
     /// 한도 값이 언제 기준인지. 로그에서 읽어 사용할 때만 갱신되는 서비스에서 쓴다.
@@ -175,6 +177,7 @@ mod tests {
         assert_eq!(json["limits"][0]["resetsAt"], 1_700_000_000_000i64);
         assert!(json["limits"][0]["lastResetAt"].is_null());
         assert!(json["limitsAsOf"].is_null());
+        assert!(json["plan"].is_null());
         assert_eq!(json["tokensToday"]["cacheRead"], 5);
         assert_eq!(json["dailyTokensThisWeek"][0]["dayStart"], 1_700_000_000_000i64);
         assert_eq!(json["dailyTokensThisWeek"][0]["tokens"], 7);

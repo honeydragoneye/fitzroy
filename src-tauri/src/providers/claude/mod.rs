@@ -24,6 +24,8 @@ const LIMITS_CACHE_FILE: &str = "claude-limits.json";
 pub struct ClaudeProvider {
     logs: LogReader,
     limits: Mutex<LimitsState>,
+    /// 구독 플랜 이름("Pro" 등). 로그인 정보를 읽을 때마다 갱신하고, 못 읽으면 마지막 값을 쓴다.
+    plan: Mutex<Option<String>>,
     /// 한도 조회 상태를 저장할 파일. 캐시 폴더를 알 수 없으면 저장하지 않는다.
     limits_cache: Option<PathBuf>,
 }
@@ -38,6 +40,7 @@ impl ClaudeProvider {
         ClaudeProvider {
             logs: LogReader::default(),
             limits: Mutex::new(limits),
+            plan: Mutex::new(None),
             limits_cache,
         }
     }
@@ -52,6 +55,9 @@ impl ClaudeProvider {
         let mut state = self.limits.lock().unwrap();
 
         if state.should_attempt(now_ms) {
+            if let Some(plan) = limits::read_plan(&config_dir.path, config_dir.is_default) {
+                *self.plan.lock().unwrap() = Some(plan);
+            }
             let token = limits::read_access_token(&config_dir.path, config_dir.is_default, now_ms);
             state.record(token.and_then(|token| limits::fetch(&token)), now_ms);
             if let Some(path) = &self.limits_cache {
@@ -140,6 +146,7 @@ impl Provider for ClaudeProvider {
         }
 
         let (limits, (session_reset_at, weekly_reset_at), error) = self.limits(&config_dir, now);
+        usage.plan = self.plan.lock().unwrap().clone();
         if let Some(limits) = limits {
             let windows = [
                 ("현재 세션", limits.session_percent, limits.session_resets_at, session_reset_at),
