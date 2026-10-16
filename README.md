@@ -1,21 +1,25 @@
 # Fitzroy
 
-A macOS menu bar app that shows your Claude usage at a glance.
+A macOS menu bar app that shows your Claude and Codex usage at a glance.
 
 The icon is modeled on Mount Fitz Roy in Patagonia. At sunrise its granite peaks glow red, which Korean hikers call the "burning sweet potato." Fitzroy borrows that look. While you have plenty of room, the mountain sits in plain daylight. As your session usage gets close to its limit, the peaks turn from gold to a deep sunset red.
 
-Click the icon to open a panel. The number in the menu bar is your current session usage.
+Click the icon to open a panel. Choose **Claude** or **Codex** from the menu in the top right to switch between them. The number in the menu bar follows the one you choose. The plan you are on (for example **Claude Pro** or **Codex Go**) is shown next to the name.
 
-- Current session and weekly limit usage, with reset times
-- Token usage today, over the last 5 hours, and over the last 7 days
+- Usage limits with reset times
+- Token usage today, over the last 5 hours, and over the last 7 days, with a breakdown by model
 - Daily token usage for this week
 
-The two kinds of numbers come from different places:
+The numbers come from different places:
 
-- **Limit usage (%)** is your whole Claude account: chats in Claude on the web, desktop, and mobile, Claude Code, and any other Claude use that counts toward your plan's limits, on every device. It shows how much of each limit you have used.
-- **Token counts** cover Claude Code on this Mac only, wherever you run it: the terminal, your IDE, or the Claude desktop app. They don't include chats or Claude Code sessions on other devices or in the cloud.
+- **Claude limit usage (%)** is your whole Claude account: chats in Claude on the web, desktop, and mobile, Claude Code, and any other Claude use that counts toward your plan's limits, on every device.
+- **Claude token counts** cover Claude Code on this Mac only, wherever you run it: the terminal, your IDE, or the Claude desktop app. They don't include chats or Claude Code sessions on other devices or in the cloud.
+- **Codex** is read from the Codex CLI's local session logs, for limits and token counts alike. It covers Codex CLI use on this Mac only, not ChatGPT chats. The values update only when you use the Codex CLI, and the panel shows when they were last updated.
 
-Support for Codex and Gemini is planned for a future version.
+> [!IMPORTANT]
+> Codex support was built and tested on the ChatGPT **Go** plan only, which has a single 30-day limit. Plus and Pro plans have different limits, such as 5-hour and weekly windows. Fitzroy should show them, but this has not been tested. If they look wrong, please [open an issue](https://github.com/honeydragoneye/fitzroy/issues).
+
+Support for Gemini is planned for a future version.
 
 > [!NOTE]
 > Fitzroy is an unofficial app. It is not affiliated with Anthropic, OpenAI, or Google. It relies on undocumented APIs and local log formats, so it may stop working at any time.
@@ -25,6 +29,7 @@ Support for Codex and Gemini is planned for a future version.
 - macOS 13 or later
 - A Mac with Apple silicon (M1 or later). Intel Macs are not supported yet.
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code), installed and logged in. Fitzroy reads the usage limits with Claude Code's login and reads token counts from Claude Code's local logs.
+- For Codex: the [Codex CLI](https://github.com/openai/codex), logged in with a ChatGPT account. Fitzroy reads only its local session logs and sends nothing over the network for Codex.
 
 ## Install
 
