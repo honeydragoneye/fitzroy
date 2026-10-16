@@ -103,7 +103,7 @@ function card(report: ProviderReport): HTMLElement {
   if (report.tokensToday) {
     const t = report.tokensToday;
     node.append(
-      el("div", "tokens", `오늘 ${formatTokens(totalTokens(t))} 토큰`),
+      el("div", "tokens", `Claude Code 오늘 ${formatTokens(totalTokens(t))} 토큰`),
       el("div", "muted", `입력 ${formatTokens(t.input)} · 출력 ${formatTokens(t.output)}`),
       el(
         "div",
