@@ -78,7 +78,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
             )?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, CHECK_UPDATES_NOW, "업데이트 확인", true, None::<&str>)?,
-            &MenuItem::with_id(app, SEND_FEEDBACK, "문제 신고 🕊️", true, None::<&str>)?,
+            &MenuItem::with_id(app, SEND_FEEDBACK, "문제신고/개선사항 🕊️", true, None::<&str>)?,
             &MenuItem::with_id(app, ABOUT, "Fitzroy에 관하여", true, None::<&str>)?,
             &MenuItem::with_id(app, QUIT, "Fitzroy 종료", true, None::<&str>)?,
         ],
