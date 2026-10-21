@@ -13,6 +13,8 @@ use std::time::SystemTime;
 use chrono::DateTime;
 use serde::Deserialize;
 
+mod server;
+
 use super::tokens::{dedupe, summarize, today_and_week_starts, Entry};
 use super::{now_ms, LimitWindow, Provider, TokenUsage, Usage};
 
@@ -273,6 +275,8 @@ struct Scan {
 pub struct CodexProvider {
     /// 바뀌지 않은 로그 파일은 다시 읽지 않는다.
     cache: Mutex<HashMap<PathBuf, Cached>>,
+    /// 서버에서 읽은 한도 값. 실패하면 로그 값을 쓴다.
+    server: server::ServerLimits,
 }
 
 impl CodexProvider {
@@ -346,14 +350,19 @@ impl Provider for CodexProvider {
             return Usage::error("홈 폴더를 찾지 못했습니다");
         };
         let now = now_ms();
-        let Scan { snapshot, entries } = match self.read(&home.join("sessions"), now) {
-            Ok(scan) => scan,
+        // 서버 값은 로그보다 최신이라 먼저 쓰고, 못 가져오면 로그의 마지막 값을 쓴다.
+        let server_snapshot = self.server.get(&home, now);
+        let scan = self.read(&home.join("sessions"), now);
+        let (log_snapshot, entries, has_logs) = match scan {
+            Ok(Scan { snapshot, entries }) => (snapshot, entries, true),
+            Err(_) if server_snapshot.is_some() => (None, Vec::new(), false),
             Err(_) => {
                 return Usage::error(
-                    "Codex 로그를 찾지 못했습니다. Codex CLI 에 로그인해 사용하면 표시됩니다",
+                    "Codex 사용 기록이 아직 없습니다.\nCodex(CLI·앱)를 한 번 사용하면 표시됩니다.\n(ChatGPT 채팅만으로는 추적되지 않습니다)",
                 )
             }
         };
+        let snapshot = server_snapshot.or(log_snapshot);
 
         let mut usage = Usage {
             tokens_source: Some("Codex".to_string()),
@@ -377,6 +386,10 @@ impl Provider for CodexProvider {
         }
         if usage.limits.is_empty() && entries.is_empty() {
             return Usage::error("아직 사용 기록이 없습니다. Codex 를 한 번 사용하면 표시됩니다");
+        }
+        if !has_logs {
+            // 로그가 없으면 토큰 수는 보여줄 게 없다. 한도만 보인다.
+            return usage;
         }
 
         let (today_start, week_starts) = today_and_week_starts(now);

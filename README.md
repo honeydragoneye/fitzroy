@@ -14,7 +14,8 @@ The numbers come from different places:
 
 - **Claude limit usage (%)** is your whole Claude account: chats in Claude on the web, desktop, and mobile, Claude Code, and any other Claude use that counts toward your plan's limits, on every device.
 - **Claude token counts** cover Claude Code on this Mac only, wherever you run it: the terminal, your IDE, or the Claude desktop app. They don't include chats or Claude Code sessions on other devices or in the cloud.
-- **Codex** is read from the Codex CLI's local session logs, for limits and token counts alike. It covers Codex CLI use on this Mac only, not ChatGPT chats. The values update only when you use the Codex CLI, and the panel shows when they were last updated.
+- **Codex limits (%)** come from ChatGPT's usage service, using the Codex CLI's login, so they are always current. They cover the shared Codex limit (Codex, Work, workspace agents, ChatGPT for Excel). ChatGPT **Chat** conversations are not part of this limit, so chatting alone doesn't move it. If the service can't be reached, Fitzroy falls back to the last value in the Codex logs and shows when it was recorded.
+- **Codex token counts** are read from the Codex CLI's local session logs, on this Mac only.
 
 > [!IMPORTANT]
 > Codex support was built and tested on the ChatGPT **Go** plan only, which has a single 30-day limit. Plus and Pro plans have different limits, such as 5-hour and weekly windows. Fitzroy should show them, but this has not been tested. If they look wrong, please [open an issue](https://github.com/honeydragoneye/fitzroy/issues).
@@ -28,8 +29,8 @@ Support for Gemini is planned for a future version.
 
 - macOS 13 or later
 - A Mac with Apple silicon (M1 or later). Intel Macs are not supported yet.
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code), installed and logged in. Fitzroy reads the usage limits with Claude Code's login and reads token counts from Claude Code's local logs.
-- For Codex: the [Codex CLI](https://github.com/openai/codex), logged in with a ChatGPT account. Fitzroy reads only its local session logs and sends nothing over the network for Codex.
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code), installed and logged in with the same account you use for Claude chats. You don't need to use it: Fitzroy only reads its login to look up your usage limits, which include your chats. Run `claude` in Terminal and log in once. Token counts come from Claude Code's local logs, so they stay empty until you use it.
+- For Codex (optional): the [Codex CLI](https://github.com/openai/codex), signed in with ChatGPT. Fitzroy uses its login to look up your limit, and reads its local session logs for token counts, so those stay empty until you've used Codex.
 
 ## Install
 
