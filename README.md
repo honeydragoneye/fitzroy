@@ -1,5 +1,7 @@
 # Fitzroy
 
+English | [한국어](README.ko.md)
+
 A macOS menu bar app that shows your Claude and Codex usage at a glance.
 
 The icon is modeled on Mount Fitz Roy in Patagonia. At sunrise its granite peaks glow red, which Korean hikers call the "burning sweet potato." Fitzroy borrows that look. While you have plenty of room, the mountain sits in plain daylight. As your session usage gets close to its limit, the peaks turn from gold to a deep sunset red.
@@ -60,7 +62,7 @@ To check right away, choose **Check for Updates** from the menu. To stop the wee
 
 ## Feedback
 
-To report a problem, choose **Report a Problem 🕊️** from the menu. Fitzroy opens a new message in your mail app with a short form and some diagnostic details filled in: the app and macOS versions, the refresh interval, and whether Fitzroy has limit values or an error message. It never includes tokens, account details, conversation content, or usage numbers. Fitzroy does not send the message itself. You can review and edit it before you send it. You can also write to myyseooo@gmail.com directly.
+To report a problem or share an idea, choose **Report a Problem / Suggestion 🕊️** from the menu. Fitzroy opens a new message in your mail app with a short form and some diagnostic details filled in: the app and macOS versions, the refresh interval, and whether Fitzroy has limit values or an error message. It never includes tokens, account details, conversation content, or usage numbers. Fitzroy does not send the message itself. You can review and edit it before you send it. You can also write to myyseooo@gmail.com directly.
 
 ## Build from source
 
