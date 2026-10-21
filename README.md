@@ -4,7 +4,7 @@ English | [한국어](README.ko.md)
 
 A macOS menu bar app that shows your Claude and Codex usage at a glance.
 
-The icon is modeled on Mount Fitz Roy in Patagonia. At sunrise its granite peaks glow red, which Korean hikers call the "burning sweet potato." Fitzroy borrows that look. While you have plenty of room, the mountain sits in plain daylight. As your session usage gets close to its limit, the peaks turn from gold to a deep sunset red.
+The icon is modeled on Mount Fitz Roy in Patagonia. At sunrise its granite peaks glow red, a sight some call the "burning sweet potato." Fitzroy borrows that look. While you have plenty of room, the mountain sits in plain daylight. As your session usage gets close to its limit, the peaks turn from gold to a deep sunset red.
 
 Click the icon to open a panel. Choose **Claude** or **Codex** from the menu in the top right to switch between them. The number in the menu bar follows the one you choose. The plan you are on (for example **Claude Pro** or **Codex Go**) is shown next to the name.
 
