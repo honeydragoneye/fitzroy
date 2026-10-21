@@ -105,7 +105,12 @@ impl Provider for ClaudeProvider {
         let mut usage = Usage::default();
         let mut errors = Vec::new();
 
-        match self.logs.read(&config_dir.path.join("projects")) {
+        // 로그 폴더가 아직 없는 것은 오류가 아니다(Claude Code 를 쓴 적이 없을 뿐): 토큰 0으로 본다.
+        let logs = match self.logs.read(&config_dir.path.join("projects")) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+            other => other,
+        };
+        match logs {
             Ok(entries) => {
                 let (today_start, week_starts) = today_and_week_starts(now);
                 let summary = summarize(&entries, now, today_start, &week_starts);

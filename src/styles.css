@@ -200,6 +200,10 @@ body {
   font-size: 12px;
 }
 
+.error {
+  white-space: pre-line;
+}
+
 .limit-head {
   display: flex;
   justify-content: space-between;

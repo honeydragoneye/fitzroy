@@ -138,7 +138,9 @@ pub fn rate_limit_delay(consecutive: u32) -> Duration {
 impl fmt::Display for LimitsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            LimitsError::NotLoggedIn => "Claude Code 로그인 정보를 찾지 못했습니다",
+            LimitsError::NotLoggedIn => {
+                "Claude Code 로그인이 필요합니다.\n터미널에서 claude 를 실행해 한 번 로그인하세요.\n(Claude 채팅 사용량도 함께 반영됩니다)"
+            }
             LimitsError::TokenExpired => {
                 "로그인 토큰이 만료됐습니다. Claude Code 를 실행하면 갱신됩니다"
             }
@@ -560,5 +562,12 @@ mod tests {
         let config_dir = std::env::home_dir().unwrap().join(".claude");
         let token = read_access_token(&config_dir, true, crate::providers::now_ms()).unwrap();
         println!("{:?}", fetch(&token));
+    }
+
+    #[test]
+    fn not_logged_in_message_tells_what_to_do() {
+        let text = LimitsError::NotLoggedIn.to_string();
+        assert!(text.contains("claude"));
+        assert!(text.contains("채팅"));
     }
 }
