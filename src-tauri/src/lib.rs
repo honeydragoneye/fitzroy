@@ -9,7 +9,7 @@ mod updates;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalPosition, Manager, State, WebviewWindow, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_positioner::{Position, WindowExt};
@@ -87,7 +87,7 @@ fn open_repository(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-fn toggle_panel(app: &AppHandle) {
+fn toggle_panel(app: &AppHandle, tray: &TrayIcon) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
         return;
     };
@@ -109,7 +109,10 @@ fn toggle_panel(app: &AppHandle) {
     }
 
     app.state::<Refresher>().refresh_if_stale();
-    let _ = window.move_window(Position::TrayBottomCenter);
+    // 아이콘 위치를 바로 읽어 놓고, 안 되면 플러그인의 계산을 쓴다.
+    if !menu_bar::place_below_icon(tray, &window) {
+        let _ = window.move_window(Position::TrayBottomCenter);
+    }
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -161,7 +164,7 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        toggle_panel(app);
+                        toggle_panel(app, tray);
                     }
                 })
                 .build(app)?;

@@ -38,8 +38,11 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSResponder",
     "NSStatusBarButton",
     "NSStatusItem",
+    "NSScreen",
     "NSView",
+    "NSWindow",
 ] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSGeometry"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

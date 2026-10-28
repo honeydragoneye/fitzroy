@@ -204,6 +204,63 @@ pub fn shrink_title_font(tray: &tauri::tray::TrayIcon) {
     });
 }
 
+/// 아이콘과 창 사이 간격(포인트)
+#[cfg(target_os = "macos")]
+const PANEL_GAP_PT: f64 = 4.0;
+
+/// 화면 가장자리에서 창을 띄우는 최소 간격(포인트)
+#[cfg(target_os = "macos")]
+const SCREEN_MARGIN_PT: f64 = 8.0;
+
+/// 창을 트레이 아이콘 바로 아래, 아이콘이 있는 화면 안에 놓는다. 놓았으면 true.
+/// 아이콘 위치를 macOS 가 주는 포인트 좌표 그대로 쓴다. 화면마다 배율이 다른 여러 모니터에서
+/// 물리 좌표로 바꾸면 창이 엉뚱한 화면에 열린다.
+#[cfg(target_os = "macos")]
+pub fn place_below_icon(tray: &tauri::tray::TrayIcon, window: &tauri::WebviewWindow) -> bool {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSWindow;
+    use objc2_foundation::NSPoint;
+
+    let Ok(ptr) = window.ns_window() else {
+        return false;
+    };
+    // 클로저로 넘길 수 있게 주소로 바꿔 들고 간다.
+    let panel_addr = ptr as usize;
+
+    tray.with_inner_tray_icon(move |inner| {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return false;
+        };
+        // SAFETY: `ns_window()` 는 이 창의 살아 있는 NSWindow 를 가리킨다. 메인 스레드에서만 쓴다.
+        let panel = unsafe { &*(panel_addr as *const NSWindow) };
+        let Some(button) = inner.ns_status_item().and_then(|item| item.button(mtm)) else {
+            return false;
+        };
+        let Some(icon_window) = button.window() else {
+            return false;
+        };
+        let icon = icon_window.frame();
+        let width = panel.frame().size.width;
+
+        let mut x = icon.origin.x + icon.size.width / 2.0 - width / 2.0;
+        if let Some(screen) = icon_window.screen() {
+            let screen = screen.frame();
+            let min = screen.origin.x + SCREEN_MARGIN_PT;
+            let max = screen.origin.x + screen.size.width - width - SCREEN_MARGIN_PT;
+            x = x.min(max).max(min);
+        }
+        // macOS 좌표는 위로 갈수록 y 가 커진다. 아이콘 창의 아래쪽 끝이 메뉴 막대의 아래쪽 끝이다.
+        panel.setFrameTopLeftPoint(NSPoint::new(x, icon.origin.y - PANEL_GAP_PT));
+        true
+    })
+    .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn place_below_icon(_tray: &tauri::tray::TrayIcon, _window: &tauri::WebviewWindow) -> bool {
+    false
+}
+
 #[cfg(not(target_os = "macos"))]
 pub fn shrink_title_font(_tray: &tauri::tray::TrayIcon) {}
 
